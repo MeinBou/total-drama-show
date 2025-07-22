@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A Tutto Reality: La Sfida Online</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-image: url('https://www.transparenttextures.com/patterns/wood-pattern.png');
+            background-color: #f0e6d2;
+        }
+        .font-bangers { font-family: 'Bangers', cursive; }
+        .btn {
+            @apply font-bangers text-2xl text-white bg-green-600 border-4 border-black rounded-full px-8 py-3 shadow-[8px_8px_0px_rgba(0,0,0,1)] transition-all duration-200;
+        }
+        .btn:hover {
+            @apply bg-green-700 shadow-[6px_6px_0px_rgba(0,0,0,1)] translate-x-[2px] translate-y-[2px];
+        }
+        .btn:active {
+            @apply bg-green-800 shadow-[2px_2px_0px_rgba(0,0,0,1)] translate-x-[6px] translate-y-[6px];
+        }
+        .panel {
+            @apply bg-amber-100 border-4 border-black rounded-2xl p-6 shadow-[10px_10px_0px_rgba(0,0,0,0.8)];
+        }
+        .character-card {
+            @apply border-4 border-black rounded-lg p-2 text-center transition-transform duration-200 cursor-pointer;
+        }
+        .character-card.selected-by-me { @apply bg-blue-400 border-blue-600; }
+        .character-card.selected-by-other { @apply bg-gray-400 border-gray-600 cursor-not-allowed opacity-60; }
+        .character-card:not(.selected-by-other):hover { @apply transform scale-105; }
+        .team-color-1 { background-color: #ef4444; } /* red-500 */
+        .team-color-2 { background-color: #22c55e; } /* green-500 */
+        .team-color-3 { background-color: #3b82f6; } /* blue-500 */
+        .team-color-4 { background-color: #f97316; } /* orange-500 */
+
+        /* Stili Chat */
+        .chat-container { @apply flex flex-col h-full bg-amber-200 border-4 border-black rounded-xl; }
+        .chat-messages { @apply flex-grow p-4 overflow-y-auto; }
+        .chat-message { @apply mb-2; }
+        .chat-message .sender { @apply font-bold; }
+        .chat-input-form { @apply flex p-2 border-t-4 border-black; }
+        
+        /* Indicatore personaggio */
+        .my-character-indicator img {
+            @apply ring-4 ring-yellow-400 ring-offset-2 ring-offset-amber-100;
+        }
+
+        /* Animazioni */
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+    </style>
+</head>
+<body class="bg-amber-50 text-gray-800">
+
+    <div id="app" class="container mx-auto p-4 min-h-screen flex flex-col items-center justify-center">
+        <!-- L'applicazione verrà renderizzata qui -->
+    </div>
+
+    <!-- Modale per messaggi -->
+    <div id="modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+        <div class="panel max-w-md w-full text-center">
+            <h3 id="modal-title" class="font-bangers text-4xl text-red-600 mb-4">Attenzione!</h3>
+            <p id="modal-message" class="text-lg mb-6"></p>
+            <button id="modal-close" class="btn bg-red-500 hover:bg-red-600">Chiudi</button>
+        </div>
+    </div>
+
+    <script type="module">
+        // Importa le funzioni necessarie da Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, getDocs, query, where, updateDoc, writeBatch, addDoc, serverTimestamp, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- CONFIGURAZIONE FIREBASE ---
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { apiKey: "YOUR_API_KEY", authDomain: "YOUR_AUTH_DOMAIN", projectId: "YOUR_PROJECT_ID" };
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'a-tutto-reality-online';
+
+        // Inizializza Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // --- STATO GLOBALE DELL'APPLICAZIONE ---
+        let globalState = {
+            currentUser: null,
+            currentScreen: 'loading',
+            gameId: null,
+            gameData: null,
+            chatMessages: [],
+            unsubscribeGame: null,
+            unsubscribeChat: null,
+        };
+
+        // --- ELEMENTI DOM ---
+        const appContainer = document.getElementById('app');
+        const modal = document.getElementById('modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMessage = document.getElementById('modal-message');
+        const modalClose = document.getElementById('modal-close');
+
+        // --- FUNZIONI DI UTILITÀ ---
+        const showModal = (message, title = "Attenzione!") => {
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+            modal.classList.remove('hidden');
+        };
+        modalClose.addEventListener('click', () => modal.classList.add('hidden'));
+
+        const generateId = (length = 5) => {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ123456789';
+            let result = '';
+            for (let i = 0; i < length; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
+            return result;
+        };
+
+        // --- FUNZIONI DI RENDERIZZAZIONE ---
+        const render = () => {
+            const screenContainer = document.getElementById('screen-container');
+            if (!screenContainer) appContainer.innerHTML = '';
+
+            switch (globalState.currentScreen) {
+                case 'loading': renderLoading(); break;
+                case 'mainMenu': renderMainMenu(); break;
+                case 'createGame': renderCreateGame(); break;
+                case 'joinGame': renderJoinGame(); break;
+                case 'findGame': renderFindGame(); break;
+                case 'lobby': renderLobby(); break;
+                case 'characterSelection': renderCharacterSelection(); break;
+                case 'game': renderGame(); break;
+                default: renderMainMenu();
+            }
+        };
+        
+        const renderWithChat = (screenHtml) => {
+            return `
+                <div class="w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6 h-[85vh]">
+                    <div id="screen-container" class="lg:col-span-2 h-full overflow-y-auto p-2">
+                        ${screenHtml}
+                    </div>
+                    <div class="h-full">
+                        ${renderChat()}
+                    </div>
+                </div>
+            `;
+        };
+        
+        const renderChat = () => {
+            const messagesHtml = globalState.chatMessages.map(msg => `
+                <div class="chat-message">
+                    <span class="sender" style="color: ${msg.senderColor || '#333'}">${msg.senderName}:</span>
+                    <span>${msg.text}</span>
+                </div>
+            `).join('');
+
+            return `
+                <div class="chat-container">
+                    <h3 class="font-bangers text-3xl text-center p-2 bg-amber-300 border-b-4 border-black">Chat</h3>
+                    <div id="chat-messages" class="chat-messages">
+                        ${messagesHtml || '<p class="text-gray-500">Nessun messaggio ancora...</p>'}
+                    </div>
+                    <form id="chat-form" class="chat-input-form">
+                        <input type="text" id="chat-input" class="w-full p-2 border-2 border-black rounded-l-lg" placeholder="Scrivi un messaggio...">
+                        <button type="submit" class="btn text-xl py-1 px-4 rounded-l-none">Invia</button>
+                    </form>
+                </div>
+            `;
+        };
+        
+        const updateChatView = () => {
+            const chatMessagesContainer = document.getElementById('chat-messages');
+            if (chatMessagesContainer) {
+                const messagesHtml = globalState.chatMessages.map(msg => `
+                    <div class="chat-message">
+                        <span class="sender" style="color: ${msg.senderColor || '#333'}">${msg.senderName}:</span>
+                        <span>${msg.text}</span>
+                    </div>
+                `).join('');
+                chatMessagesContainer.innerHTML = messagesHtml || '<p class="text-gray-500">Nessun messaggio ancora...</p>';
+                chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+            }
+        };
+
+        const renderLoading = () => { appContainer.innerHTML = `<h1 class="font-bangers text-6xl text-center">Caricamento...</h1>`; };
+
+        const renderMainMenu = () => {
+            appContainer.innerHTML = `
+                <div class="text-center w-full max-w-lg">
+                    <h1 class="font-bangers text-8xl text-yellow-400" style="text-shadow: 4px 4px 0 #000, -4px -4px 0 #000, 4px -4px 0 #000, -4px 4px 0 #000, 4px 0 0 #000, -4px 0 0 #000, 0 4px 0 #000, 0 -4px 0 #000;">A Tutto Reality</h1>
+                    <h2 class="font-bangers text-6xl text-white mb-12" style="text-shadow: 3px 3px 0 #000;">La Sfida Online</h2>
+                    <div class="flex flex-col space-y-6">
+                        <button data-action="goToCreateGame" class="btn">Crea Partita</button>
+                        <button data-action="goToJoinGame" class="btn">Unisciti con Codice</button>
+                        <button data-action="goToFindGame" class="btn">Cerca Stanza Disponibile</button>
+                    </div>
+                </div>
+            `;
+        };
+        
+        const renderCreateGame = () => {
+            appContainer.innerHTML = `
+                <div class="panel w-full max-w-4xl">
+                    <h2 class="font-bangers text-4xl text-center mb-6">Crea la tua Partita</h2>
+                    <form id="create-game-form" class="space-y-6">
+                        <div>
+                            <label class="block font-bold mb-2">Numero Giocatori (12-24):</label>
+                            <input type="number" id="player-count" value="12" min="12" max="24" class="w-full p-2 border-2 border-black rounded">
+                        </div>
+                        <div>
+                            <label class="block font-bold mb-2">Numero Team (2-4):</label>
+                            <input type="number" id="team-count" value="2" min="2" max="4" class="w-full p-2 border-2 border-black rounded">
+                        </div>
+                        <div id="team-configs" class="space-y-4"></div>
+                        <div>
+                            <label class="block font-bold mb-2">Episodio del Merge:</label>
+                            <input type="number" id="merge-episode" value="7" min="2" class="w-full p-2 border-2 border-black rounded">
+                        </div>
+                        <div>
+                            <label class="block font-bold mb-2">Ritorni in gara (0, 1, o 2):</label>
+                            <input type="number" id="return-count" value="1" min="0" max="2" class="w-full p-2 border-2 border-black rounded">
+                        </div>
+                        <div id="return-episodes" class="space-y-2"></div>
+                        <hr class="border-black my-4">
+                        <h3 class="font-bangers text-3xl">Personaggi Personalizzati</h3>
+                        <div id="characters-list" class="space-y-2"></div>
+                        <button type="button" data-action="addCharacter" class="btn bg-blue-500 hover:bg-blue-600 text-xl py-2">Aggiungi Personaggio</button>
+                        <hr class="border-black my-4">
+                        <div class="text-center">
+                            <button type="submit" class="btn">Crea e Vai alla Lobby</button>
+                            <button type="button" data-action="goToMainMenu" class="btn bg-gray-500 hover:bg-gray-600 mt-4">Indietro</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            updateTeamConfigs();
+            updateReturnEpisodes();
+            const playerCountInput = document.getElementById('player-count');
+            for(let i=0; i< parseInt(playerCountInput.value); i++) addCharacterRow(i);
+            playerCountInput.addEventListener('change', (e) => {
+                const charContainer = document.getElementById('characters-list');
+                const newCount = parseInt(e.target.value);
+                const currentCount = charContainer.children.length;
+                if (newCount > currentCount) for(let i = currentCount; i < newCount; i++) addCharacterRow(i);
+                else if (newCount < currentCount) for(let i = currentCount; i > newCount; i--) charContainer.lastElementChild.remove();
+            });
+            document.getElementById('team-count').addEventListener('change', updateTeamConfigs);
+            document.getElementById('return-count').addEventListener('change', updateReturnEpisodes);
+        };
+
+        const renderJoinGame = () => {
+            appContainer.innerHTML = `
+                <div class="panel max-w-md w-full text-center">
+                    <h2 class="font-bangers text-4xl mb-6">Unisciti con Codice</h2>
+                    <form id="join-game-form">
+                        <input type="text" id="game-code" placeholder="INSERISCI CODICE" class="w-full p-3 text-center text-2xl font-bold uppercase border-4 border-black rounded mb-4" maxlength="5">
+                        <button type="submit" class="btn">Unisciti</button>
+                    </form>
+                     <button type="button" data-action="goToMainMenu" class="btn bg-gray-500 hover:bg-gray-600 mt-4">Indietro</button>
+                </div>
+            `;
+        };
+
+        const renderFindGame = async () => {
+             appContainer.innerHTML = `<div class="panel w-full max-w-lg"><h2 class="font-bangers text-4xl text-center mb-4">Stanze Disponibili</h2><div id="game-list-container">Caricamento...</div><button type="button" data-action="goToMainMenu" class="btn bg-gray-500 hover:bg-gray-600 mt-6">Indietro</button></div>`;
+             try {
+                const gamesRef = collection(db, `artifacts/${appId}/public/data/games`);
+                const q = query(gamesRef, where("status", "==", "waiting"));
+                const querySnapshot = await getDocs(q);
+                const gameListContainer = document.getElementById('game-list-container');
+                if (querySnapshot.empty) {
+                    gameListContainer.innerHTML = '<p class="text-center">Nessuna stanza disponibile al momento. Creane una!</p>';
+                    return;
+                }
+                let listHtml = '<ul class="space-y-3">';
+                querySnapshot.forEach((doc) => {
+                    const game = doc.data();
+                    listHtml += `
+                        <li class="flex justify-between items-center bg-amber-200 p-3 rounded border-2 border-black">
+                            <span class="font-bold">Stanza ${doc.id} (${game.players.length}/${game.settings.playerCount})</span>
+                            <button data-action="joinWithId" data-id="${doc.id}" class="btn bg-blue-500 hover:bg-blue-600 text-xl py-1 px-4">Entra</button>
+                        </li>
+                    `;
+                });
+                listHtml += '</ul>';
+                gameListContainer.innerHTML = listHtml;
+             } catch (error) {
+                 console.error("Errore nel cercare le partite:", error);
+                 document.getElementById('game-list-container').innerHTML = '<p class="text-center text-red-600">Errore nel caricamento.</p>';
+             }
+        };
+
+        const renderLobby = () => {
+            if (!globalState.gameData) { renderLoading(); return; }
+            const { settings, players, hostId, id } = globalState.gameData;
+            const isHost = globalState.currentUser.uid === hostId;
+            let playersHtml = players.map(p => `<li class="bg-amber-200 p-2 rounded border-2 border-black">${p.name} ${p.uid === hostId ? '👑' : ''}</li>`).join('');
+            
+            const screenHtml = `
+                <div class="panel w-full">
+                    <h2 class="font-bangers text-4xl text-center mb-2">Lobby</h2>
+                    <p class="text-center font-bold text-2xl mb-4">Codice Stanza: <span class="text-red-600 bg-white px-2 rounded border-2 border-black">${id}</span></p>
+                    <p class="text-center mb-4">In attesa di altri giocatori... (${players.length}/${settings.playerCount})</p>
+                    <ul class="space-y-2 mb-6 h-64 overflow-y-auto p-2 bg-white border-2 border-black rounded">${playersHtml}</ul>
+                    <div class="text-center">
+                        ${isHost ? `<button data-action="startGame" class="btn">Avvia Partita</button>` : '<p class="font-bold">Solo l\'host può avviare la partita.</p>'}
+                        <button data-action="leaveGame" class="btn bg-red-500 hover:bg-red-600 mt-4">Esci</button>
+                    </div>
+                </div>
+            `;
+            appContainer.innerHTML = renderWithChat(screenHtml);
+            updateChatView();
+        };
+
+        const renderCharacterSelection = () => {
+            const { settings, players } = globalState.gameData;
+            const myUid = globalState.currentUser.uid;
+            
+            const charactersHtml = settings.characters.map((char, index) => {
+                const playerWhoSelected = players.find(p => p.characterIndex === index);
+                let cardClass = 'bg-amber-200';
+                let selectedText = '';
+                if (playerWhoSelected) {
+                    if (playerWhoSelected.uid === myUid) {
+                        cardClass = 'selected-by-me';
+                        selectedText = '<p class="font-bold text-white text-sm mt-1">SELEZIONATO DA TE</p>';
+                    } else {
+                        cardClass = 'selected-by-other';
+                        selectedText = '<p class="font-bold text-white text-sm mt-1">GIÀ PRESO</p>';
+                    }
+                }
+                return `
+                    <div data-action="selectCharacter" data-index="${index}" class="character-card ${cardClass}">
+                        <img src="${char.img || 'https://placehold.co/100x100/e2e8f0/333?text=?'}" onerror="this.onerror=null;this.src='https://placehold.co/100x100/e2e8f0/333?text=Error';" class="w-24 h-24 object-cover mx-auto rounded-md border-2 border-black">
+                        <p class="font-bold mt-2 truncate">${char.name}</p>
+                        ${selectedText}
+                    </div>
+                `;
+            }).join('');
+
+            const screenHtml = `
+                <div class="panel w-full">
+                    <h2 class="font-bangers text-4xl text-center mb-4">Scegli il tuo Personaggio</h2>
+                    <p class="text-center mb-6">Scegli segretamente il personaggio che vuoi interpretare. La tua scelta non sarà visibile agli altri.</p>
+                    <div class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                        ${charactersHtml}
+                    </div>
+                    <p class="text-center mt-6 font-bold">In attesa che tutti i giocatori scelgano...</p>
+                </div>
+            `;
+            appContainer.innerHTML = renderWithChat(screenHtml);
+            updateChatView();
+        };
+        
+        const renderGame = () => {
+            const { settings, players, teams, episode, status, challengeResult, votes, eliminatedThisRound } = globalState.gameData;
+            const myPlayer = players.find(p => p.uid === globalState.currentUser.uid);
+            
+            const getCharacter = (player) => settings.characters[player.characterIndex];
+
+            const teamsHtml = teams.map(team => {
+                const membersHtml = players
+                    .filter(p => p.teamId === team.id && p.status === 'active')
+                    .map(p => {
+                        const isMyCharacter = myPlayer && p.characterIndex === myPlayer.characterIndex;
+                        return `
+                        <div class="flex flex-col items-center text-center ${isMyCharacter ? 'my-character-indicator' : ''}" title="${getCharacter(p).name}">
+                            <img src="${getCharacter(p).img || 'https://placehold.co/80x80/e2e8f0/333?text=?'}" onerror="this.onerror=null;this.src='https://placehold.co/80x80/e2e8f0/333?text=Error';" class="w-16 h-16 md:w-20 md:h-20 object-cover rounded-full border-4 border-black">
+                            <p class="font-bold text-sm mt-1 truncate max-w-[80px]">${getCharacter(p).name}</p>
+                        </div>
+                    `}).join('');
+
+                return `
+                    <div class="panel team-color-${team.id} text-white">
+                        <h3 class="font-bangers text-3xl text-center mb-4" style="text-shadow: 2px 2px 0 #000;">Team ${team.name}</h3>
+                        <div class="grid grid-cols-3 sm:grid-cols-4 gap-4">${membersHtml}</div>
+                    </div>
+                `;
+            }).join('');
+            
+            const isHost = globalState.currentUser.uid === globalState.gameData.hostId;
+            let gameControls = '';
+            let statusMessage = '';
+
+            if (status === 'challenge') {
+                statusMessage = `<h2 class="font-bangers text-5xl text-center my-4">Episodio ${episode}: Pronti per la sfida!</h2>`;
+                if(isHost) gameControls = `<button data-action="runChallenge" class="btn mt-6">Avvia Sfida</button>`;
+            } else if (status === 'challenge_result') {
+                const winningTeam = teams.find(t => t.id === challengeResult.winningTeamId);
+                const losingTeams = teams.filter(t => challengeResult.losingTeamIds.includes(t.id));
+                statusMessage = `
+                    <h2 class="font-bangers text-5xl text-center my-4">Risultato Sfida!</h2>
+                    <p class="text-center text-2xl font-bold text-green-600">Team Vincente: ${winningTeam.name}</p>
+                    <p class="text-center text-xl font-bold text-red-600 mt-2">Team Perdenti: ${losingTeams.map(t=>t.name).join(', ')}</p>
+                `;
+                if(isHost) gameControls = `<button data-action="goToElimination" class="btn mt-6">Vai alla Cerimonia</button>`;
+            } else if (status === 'elimination') {
+                const losingTeams = teams.filter(t => challengeResult.losingTeamIds.includes(t.id));
+                statusMessage = `<h2 class="font-bangers text-5xl text-center my-4 text-red-600">Cerimonia di Eliminazione per i Team: ${losingTeams.map(t=>t.name).join(', ')}!</h2>`;
+                
+                const myTeamId = myPlayer.teamId;
+                if(challengeResult.losingTeamIds.includes(myTeamId)){
+                    const alreadyVoted = votes && votes[myPlayer.uid];
+                    if(alreadyVoted) statusMessage += `<p class="text-center font-bold">Hai votato. In attesa degli altri...</p>`;
+                    else statusMessage += renderVoteScreen();
+                } else {
+                    statusMessage += `<p class="text-center font-bold">Il tuo team è salvo! Attendi l'esito della votazione.</p>`;
+                }
+            } else if (status === 'reveal') {
+                 statusMessage = `<h2 class="font-bangers text-5xl text-center my-4">Il Momento della Verità...</h2>`;
+                 if(isHost) gameControls = `<button data-action="revealVotes" class="btn mt-6">Rivela i Voti</button>`;
+            } else if (status === 'revealed') {
+                const eliminatedPlayer = players.find(p => p.uid === eliminatedThisRound);
+                const eliminatedChar = getCharacter(eliminatedPlayer);
+                 statusMessage = `<h2 class="font-bangers text-5xl text-center my-4 text-red-700">${eliminatedChar.name} è stato eliminato!</h2>`;
+                 if(isHost) gameControls = `<button data-action="nextEpisode" class="btn mt-6">Prossimo Episodio</button>`;
+            }
+
+            const screenHtml = `
+                <div class="w-full">
+                    ${statusMessage}
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                        ${teamsHtml}
+                    </div>
+                    <div class="text-center">
+                        ${gameControls}
+                    </div>
+                </div>
+            `;
+            appContainer.innerHTML = renderWithChat(screenHtml);
+            updateChatView();
+        };
+
+        const renderVoteScreen = () => {
+            const { players, settings } = globalState.gameData;
+            const myPlayer = players.find(p => p.uid === globalState.currentUser.uid);
+            const losingTeamPlayers = players.filter(p => p.teamId === myPlayer.teamId && p.status === 'active');
+
+            const voteOptionsHtml = losingTeamPlayers.map(p => {
+                if(p.uid === myPlayer.uid) return ''; // Non puoi votare te stesso
+                const character = settings.characters[p.characterIndex];
+                return `
+                    <div data-action="votePlayer" data-uid="${p.uid}" class="character-card bg-amber-200">
+                        <img src="${character.img || 'https://placehold.co/100x100/e2e8f0/333?text=?'}" onerror="this.onerror=null;this.src='https://placehold.co/100x100/e2e8f0/333?text=Error';" class="w-24 h-24 object-cover mx-auto rounded-md border-2 border-black">
+                        <p class="font-bold mt-2">${character.name}</p>
+                    </div>
+                `;
+            }).join('');
+
+            return `
+                <div class="panel mt-6 max-w-3xl mx-auto">
+                    <h3 class="font-bangers text-3xl text-center mb-4">Vota chi eliminare dal tuo team!</h3>
+                    <div class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                        ${voteOptionsHtml}
+                    </div>
+                </div>
+            `;
+        };
+
+        // --- LOGICA DI GIOCO E GESTIONE EVENTI ---
+        const handleAppClick = (e) => {
+            const target = e.target.closest('[data-action]');
+            if (!target) return;
+
+            const { action, id, index, uid } = target.dataset;
+
+            switch (action) {
+                case 'goToMainMenu': leaveGameCleanup(); break;
+                case 'goToCreateGame': globalState.currentScreen = 'createGame'; render(); break;
+                case 'goToJoinGame': globalState.currentScreen = 'joinGame'; render(); break;
+                case 'goToFindGame': globalState.currentScreen = 'findGame'; render(); break;
+                case 'addCharacter': addCharacterRow(); break;
+                case 'removeCharacter': target.closest('.character-row').remove(); break;
+                case 'joinWithId': joinGame(id); break;
+                case 'startGame': startGame(); break;
+                case 'leaveGame': leaveGame(); break;
+                case 'selectCharacter': if (!target.classList.contains('selected-by-other')) selectCharacter(index); break;
+                case 'runChallenge': runChallenge(); break;
+                case 'goToElimination': goToElimination(); break;
+                case 'votePlayer': submitVote(uid); break;
+                case 'revealVotes': revealVotes(); break;
+                case 'nextEpisode': nextEpisode(); break;
+            }
+        };
+
+        const handleAppSubmit = (e) => {
+            e.preventDefault();
+            const formId = e.target.id;
+            if (formId === 'create-game-form') createGame();
+            else if (formId === 'join-game-form') {
+                const code = document.getElementById('game-code').value.toUpperCase();
+                if (code) joinGame(code);
+            } else if (formId === 'chat-form') {
+                handleSendMessage();
+            }
+        };
+
+        const updateTeamConfigs = () => {
+            const teamCount = parseInt(document.getElementById('team-count').value) || 2;
+            const container = document.getElementById('team-configs');
+            container.innerHTML = '';
+            for (let i = 1; i <= teamCount; i++) {
+                const div = document.createElement('div');
+                div.innerHTML = `<label class="font-bold">Nome Team ${i}:</label><input type="text" class="team-name w-full p-2 border-2 border-black rounded" value="Team ${i}">`;
+                container.appendChild(div);
+            }
+        };
+
+        const updateReturnEpisodes = () => {
+            const returnCount = parseInt(document.getElementById('return-count').value) || 0;
+            const container = document.getElementById('return-episodes');
+            container.innerHTML = '';
+            for (let i = 1; i <= returnCount; i++) {
+                const div = document.createElement('div');
+                div.innerHTML = `<label class="font-bold">Episodio Ritorno ${i}:</label><input type="number" class="return-episode w-full p-2 border-2 border-black rounded" value="${3 + i*2}">`;
+                container.appendChild(div);
+            }
+        };
+
+        const addCharacterRow = (index = null) => {
+            const list = document.getElementById('characters-list');
+            const div = document.createElement('div');
+            div.className = 'character-row grid grid-cols-1 md:grid-cols-3 gap-2 items-center';
+            const charIndex = index !== null ? index : list.children.length;
+            div.innerHTML = `
+                <input type="text" placeholder="Nome Personaggio ${charIndex + 1}" class="character-name w-full p-2 border-2 border-black rounded" value="Personaggio ${charIndex + 1}">
+                <div class="flex gap-2">
+                    <input type="text" placeholder="URL Immagine" class="character-img-url w-full p-2 border-2 border-black rounded">
+                    <input type="file" class="character-img-file hidden" accept="image/png, image/jpeg, image/gif" id="file-${charIndex}">
+                    <label for="file-${charIndex}" class="btn bg-blue-500 hover:bg-blue-600 text-sm py-1 px-2 cursor-pointer">File</label>
+                </div>
+                <button type="button" data-action="removeCharacter" class="btn bg-red-500 hover:bg-red-600 text-sm py-1 px-2 justify-self-start md:justify-self-center">X</button>
+            `;
+            list.appendChild(div);
+        };
+
+        const createGame = async () => {
+            const characterRows = document.querySelectorAll('.character-row');
+            const characterPromises = Array.from(characterRows).map(async (row, index) => {
+                const nameInput = row.querySelector('.character-name');
+                const urlInput = row.querySelector('.character-img-url');
+                const fileInput = row.querySelector('.character-img-file');
+                const name = nameInput.value.trim() || `Personaggio ${index + 1}`;
+                let img = urlInput.value.trim();
+                if (!img && fileInput.files && fileInput.files[0]) {
+                    try {
+                        img = await new Promise((resolve, reject) => {
+                            const reader = new FileReader();
+                            reader.onload = e => resolve(e.target.result);
+                            reader.onerror = reject;
+                            reader.readAsDataURL(fileInput.files[0]);
+                        });
+                    } catch (error) {
+                        img = null;
+                    }
+                }
+                return { name, img };
+            });
+
+            const resolvedCharacters = await Promise.all(characterPromises);
+            const settings = {
+                playerCount: parseInt(document.getElementById('player-count').value),
+                teamCount: parseInt(document.getElementById('team-count').value),
+                teams: Array.from(document.querySelectorAll('.team-name')).map((input, i) => ({ id: i + 1, name: input.value.trim() || `Team ${i + 1}`, color: `team-color-${i + 1}` })),
+                mergeEpisode: parseInt(document.getElementById('merge-episode').value),
+                returnCount: parseInt(document.getElementById('return-count').value),
+                returnEpisodes: Array.from(document.querySelectorAll('.return-episode')).map(input => parseInt(input.value)),
+                characters: resolvedCharacters,
+            };
+
+            const newGameId = generateId();
+            const hostPlayer = {
+                uid: globalState.currentUser.uid,
+                name: `Anonimo ${Math.floor(Math.random() * 1000)}`,
+                isHost: true,
+                characterIndex: null,
+            };
+
+            const gameData = {
+                id: newGameId,
+                hostId: globalState.currentUser.uid,
+                status: 'waiting',
+                players: [hostPlayer],
+                settings,
+                episode: 1,
+                createdAt: new Date(),
+            };
+            
+            try {
+                const gameRef = doc(db, `artifacts/${appId}/public/data/games`, newGameId);
+                await setDoc(gameRef, gameData);
+                joinGame(newGameId);
+            } catch (error) {
+                showModal("Impossibile creare la partita. Controlla la connessione e riprova.");
+            }
+        };
+
+        const joinGame = async (gameId) => {
+            if (!gameId) { showModal("Codice non valido."); return; }
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, gameId);
+            try {
+                const gameDoc = await getDoc(gameRef);
+                if (!gameDoc.exists()) { showModal(`Partita con codice ${gameId} non trovata.`); return; }
+                
+                let gameData = gameDoc.data();
+                const myUid = globalState.currentUser.uid;
+
+                if (!gameData.players.some(p => p.uid === myUid)) {
+                    if (gameData.players.length >= gameData.settings.playerCount) { showModal("Questa partita è piena!"); return; }
+                    if (gameData.status !== 'waiting') { showModal("Questa partita è già iniziata!"); return; }
+
+                    const newPlayer = {
+                        uid: myUid,
+                        name: `Anonimo ${Math.floor(Math.random() * 1000)}`,
+                        isHost: false,
+                        characterIndex: null,
+                    };
+                    await updateDoc(gameRef, { players: [...gameData.players, newPlayer] });
+                }
+                
+                globalState.gameId = gameId;
+                
+                if (globalState.unsubscribeGame) globalState.unsubscribeGame();
+                globalState.unsubscribeGame = onSnapshot(gameRef, (doc) => {
+                    if (doc.exists()) {
+                        globalState.gameData = doc.data();
+                        const newScreen = getScreenFromStatus(globalState.gameData.status);
+                        if(globalState.currentScreen !== newScreen){
+                            globalState.currentScreen = newScreen;
+                            render();
+                        } else {
+                            const screenContainer = document.getElementById('screen-container');
+                            if(screenContainer) render();
+                        }
+                    } else {
+                        showModal("La partita non esiste più.");
+                        leaveGameCleanup();
+                    }
+                });
+                
+                if (globalState.unsubscribeChat) globalState.unsubscribeChat();
+                const chatRef = collection(db, `artifacts/${appId}/public/data/games`, gameId, 'chat');
+                const q = query(chatRef, orderBy("timestamp"));
+                globalState.unsubscribeChat = onSnapshot(q, (snapshot) => {
+                    globalState.chatMessages = snapshot.docs.map(doc => doc.data());
+                    updateChatView();
+                });
+
+            } catch (error) {
+                showModal("Impossibile unirsi alla partita. Riprova.");
+            }
+        };
+        
+        const leaveGame = async () => {
+            if (!globalState.gameId || !globalState.currentUser) return;
+            
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            const updatedPlayers = globalState.gameData.players.filter(p => p.uid !== globalState.currentUser.uid);
+            
+            try {
+                if (updatedPlayers.length > 0) await updateDoc(gameRef, { players: updatedPlayers });
+            } catch (error) {
+                 console.error("Errore nell'uscire dalla partita:", error);
+            } finally {
+                leaveGameCleanup();
+            }
+        };
+
+        const leaveGameCleanup = () => {
+            if(globalState.unsubscribeGame) globalState.unsubscribeGame();
+            if(globalState.unsubscribeChat) globalState.unsubscribeChat();
+            globalState.gameId = null;
+            globalState.gameData = null;
+            globalState.chatMessages = [];
+            globalState.unsubscribeGame = null;
+            globalState.unsubscribeChat = null;
+            globalState.currentScreen = 'mainMenu';
+            render();
+        };
+        
+        const getScreenFromStatus = (status) => {
+            switch(status){
+                case 'waiting': return 'lobby';
+                case 'character-selection': return 'characterSelection';
+                case 'challenge': case 'challenge_result': case 'elimination': case 'reveal': case 'revealed': return 'game';
+                default: return 'mainMenu';
+            }
+        };
+        
+        const handleSendMessage = async () => {
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if (text === '' || !globalState.gameId) return;
+
+            const myPlayer = globalState.gameData.players.find(p => p.uid === globalState.currentUser.uid);
+            if (!myPlayer) return;
+
+            const chatRef = collection(db, `artifacts/${appId}/public/data/games`, globalState.gameId, 'chat');
+            try {
+                await addDoc(chatRef, {
+                    senderId: myPlayer.uid,
+                    senderName: myPlayer.name,
+                    text: text,
+                    timestamp: serverTimestamp()
+                });
+                input.value = '';
+            } catch (error) {
+                showModal("Impossibile inviare il messaggio.");
+            }
+        };
+
+        const startGame = async () => {
+            if (!globalState.gameId) return;
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            
+            const { players, settings } = globalState.gameData;
+            const playersNeeded = settings.playerCount - players.length;
+            const newCpuPlayers = [];
+            for(let i=0; i < playersNeeded; i++){
+                newCpuPlayers.push({
+                    uid: `CPU-${generateId(8)}`,
+                    name: `CPU ${i+1}`,
+                    isCpu: true,
+                    characterIndex: null,
+                });
+            }
+            const allPlayers = [...players, ...newCpuPlayers];
+
+            await updateDoc(gameRef, { status: 'character-selection', players: allPlayers });
+        };
+
+        const selectCharacter = async (charIndexStr) => {
+            const charIndex = parseInt(charIndexStr);
+            if(isNaN(charIndex)) return;
+
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            const myUid = globalState.currentUser.uid;
+            
+            const gameDoc = await getDoc(gameRef);
+            if (!gameDoc.exists()) return;
+            const gameData = gameDoc.data();
+
+            if(gameData.players.some(p => p.characterIndex === charIndex)) {
+                showModal("Questo personaggio è già stato scelto!");
+                return;
+            }
+
+            const updatedPlayers = gameData.players.map(p => p.uid === myUid ? { ...p, characterIndex: charIndex } : p);
+            await updateDoc(gameRef, { players: updatedPlayers });
+            checkAllCharactersSelected();
+        };
+
+        const checkAllCharactersSelected = async () => {
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            const gameDoc = await getDoc(gameRef);
+             if (!gameDoc.exists()) return;
+            const gameData = gameDoc.data();
+
+            const humanPlayers = gameData.players.filter(p => !p.isCpu);
+            if (humanPlayers.every(p => p.characterIndex !== null)) {
+                let availableIndexes = gameData.settings.characters.map((_, i) => i).filter(i => !gameData.players.some(p => p.characterIndex === i));
+                
+                const finalPlayers = gameData.players.map(p => {
+                    if (p.isCpu && p.characterIndex === null) {
+                        const randomIndex = Math.floor(Math.random() * availableIndexes.length);
+                        p.characterIndex = availableIndexes.splice(randomIndex, 1)[0];
+                    }
+                    return p;
+                });
+
+                assignTeams(finalPlayers, gameData.settings.teams);
+                await updateDoc(gameRef, { status: 'challenge', players: finalPlayers, teams: gameData.settings.teams });
+            }
+        };
+
+        const assignTeams = (players, teams) => {
+            const shuffledPlayers = [...players].sort(() => 0.5 - Math.random());
+            shuffledPlayers.forEach((player, index) => {
+                player.teamId = teams[index % teams.length].id;
+                player.status = 'active';
+            });
+        };
+
+        const runChallenge = async () => {
+            const { teams } = globalState.gameData;
+            const winningTeamId = teams[Math.floor(Math.random() * teams.length)].id;
+            const losingTeamIds = teams.filter(t => t.id !== winningTeamId).map(t => t.id);
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            await updateDoc(gameRef, { status: 'challenge_result', challengeResult: { winningTeamId, losingTeamIds } });
+        };
+        
+        const goToElimination = async () => {
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            await updateDoc(gameRef, { status: 'elimination', votes: {} });
+        };
+
+        const submitVote = async (votedPlayerUid) => {
+            const myUid = globalState.currentUser.uid;
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            await updateDoc(gameRef, { [`votes.${myUid}`]: votedPlayerUid });
+            checkAllVotesIn();
+        };
+
+        const checkAllVotesIn = async () => {
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            const gameDoc = await getDoc(gameRef);
+            if (!gameDoc.exists()) return;
+            const gameData = gameDoc.data();
+
+            const { players, challengeResult, votes } = gameData;
+            const voters = players.filter(p => p.status === 'active' && challengeResult.losingTeamIds.includes(p.teamId));
+
+            const batch = writeBatch(db);
+            let cpuVoted = false;
+            voters.forEach(voter => {
+                if (voter.isCpu && !votes[voter.uid]) {
+                    const potentialTargets = players.filter(p => p.status === 'active' && p.teamId === voter.teamId && p.uid !== voter.uid);
+                    if (potentialTargets.length > 0) {
+                        const target = potentialTargets[Math.floor(Math.random() * potentialTargets.length)];
+                        batch.update(gameRef, { [`votes.${voter.uid}`]: target.uid });
+                        cpuVoted = true;
+                    }
+                }
+            });
+            if (cpuVoted) await batch.commit();
+
+            const finalDoc = await getDoc(gameRef);
+            const finalData = finalDoc.data();
+            const finalVoters = finalData.players.filter(p => p.status === 'active' && finalData.challengeResult.losingTeamIds.includes(p.teamId));
+            if (finalVoters.length === Object.keys(finalData.votes).length) {
+                await updateDoc(gameRef, { status: 'reveal' });
+            }
+        };
+
+        const revealVotes = async () => {
+            const { players, votes } = globalState.gameData;
+            const voteCounts = {};
+            for(const voterUid in votes) {
+                const votedUid = votes[voterUid];
+                voteCounts[votedUid] = (voteCounts[votedUid] || 0) + 1;
+            }
+
+            let maxVotes = -1, tiedPlayers = [];
+            for (const uid in voteCounts) {
+                if (voteCounts[uid] > maxVotes) {
+                    maxVotes = voteCounts[uid];
+                    tiedPlayers = [uid];
+                } else if (voteCounts[uid] === maxVotes) {
+                    tiedPlayers.push(uid);
+                }
+            }
+            const eliminatedUid = tiedPlayers.length > 0 ? tiedPlayers[Math.floor(Math.random() * tiedPlayers.length)] : null;
+            
+            const updatedPlayers = players.map(p => p.uid === eliminatedUid ? { ...p, status: 'eliminated' } : p);
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            await updateDoc(gameRef, { status: 'revealed', players: updatedPlayers, eliminatedThisRound: eliminatedUid, voteCounts });
+        };
+        
+        const nextEpisode = async () => {
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            await updateDoc(gameRef, { status: 'challenge', episode: globalState.gameData.episode + 1, challengeResult: null, eliminatedThisRound: null, voteCounts: null, votes: {} });
+        };
+
+        // --- INIZIALIZZAZIONE ---
+        const init = async () => {
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    globalState.currentUser = user;
+                } else {
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (error) {
+                        showModal("Autenticazione fallita. L'app potrebbe non funzionare correttamente.");
+                        globalState.currentScreen = 'mainMenu';
+                        render();
+                    }
+                    return;
+                }
+                
+                if (globalState.currentScreen === 'loading') {
+                    globalState.currentScreen = 'mainMenu';
+                    render();
+                }
+            });
+        };
+
+        appContainer.addEventListener('click', handleAppClick);
+        appContainer.addEventListener('submit', handleAppSubmit);
+        init();
+    </script>
+</body>
+</html>
