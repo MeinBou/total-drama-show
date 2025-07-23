@@ -72,18 +72,12 @@
 
     <script type="module">
         // Importa le funzioni necessarie da Firebase
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, getDocs, query, where, updateDoc, writeBatch, addDoc, serverTimestamp, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, getDocs, query, where, updateDoc, writeBatch, addDoc, serverTimestamp, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-       // Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
-
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+// --- CONFIGURAZIONE FIREBASE ---
+// Questo è il blocco corretto che hai preso da Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyBRdVmq9sIUJsLubKPTVUV0a1AIVpndhcA",
   authDomain: "total-drama-la-sfida.firebaseapp.com",
@@ -94,15 +88,12 @@ const firebaseConfig = {
   measurementId: "G-QE0Z4XWTBG"
 };
 
-// Initialize Firebase
+// Inizializza Firebase (UNA SOLA VOLTA)
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'a-tutto-reality-online';
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'a-tutto-reality-online';
 
-        // Inizializza Firebase
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
 
         // --- STATO GLOBALE DELL'APPLICAZIONE ---
         let globalState = {
