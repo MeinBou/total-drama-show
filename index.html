@@ -72,28 +72,26 @@
 
     <script type="module">
         // Importa le funzioni necessarie da Firebase
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, getDocs, query, where, updateDoc, writeBatch, addDoc, serverTimestamp, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, getDocs, query, where, updateDoc, writeBatch, addDoc, serverTimestamp, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-// --- CONFIGURAZIONE FIREBASE ---
-// Questo è il blocco corretto che hai preso da Firebase
-const firebaseConfig = {
-  apiKey: "AIzaSyBRdVmq9sIUJsLubKPTVUV0a1AIVpndhcA",
-  authDomain: "total-drama-la-sfida.firebaseapp.com",
-  projectId: "total-drama-la-sfida",
-  storageBucket: "total-drama-la-sfida.firebasestorage.app",
-  messagingSenderId: "668431070513",
-  appId: "1:668431070513:web:bd2a955d6ebfdc810d6c10",
-  measurementId: "G-QE0Z4XWTBG"
-};
+        // --- CONFIGURAZIONE FIREBASE ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyBRdVmq9sIUJsLubKPTVUV0a1AIVpndhcA",
+            authDomain: "total-drama-la-sfida.firebaseapp.com",
+            projectId: "total-drama-la-sfida",
+            storageBucket: "total-drama-la-sfida.firebasestorage.app",
+            messagingSenderId: "668431070513",
+            appId: "1:668431070513:web:bd2a955d6ebfdc810d6c10",
+            measurementId: "G-QE0Z4XWTBG"
+        };
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'a-tutto-reality-online';
 
-// Inizializza Firebase (UNA SOLA VOLTA)
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'a-tutto-reality-online';
-
+        // Inizializza Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
 
         // --- STATO GLOBALE DELL'APPLICAZIONE ---
         let globalState = {
@@ -236,7 +234,7 @@ const appId = typeof __app_id !== 'undefined' ? __app_id : 'a-tutto-reality-onli
                         <div id="return-episodes" class="space-y-2"></div>
                         <hr class="border-black my-4">
                         <h3 class="font-bangers text-3xl">Personaggi Personalizzati</h3>
-                        <div id="characters-list" class="space-y-2"></div>
+                        <div id="characters-list" class="space-y-4"></div>
                         <button type="button" data-action="addCharacter" class="btn bg-blue-500 hover:bg-blue-600 text-xl py-2">Aggiungi Personaggio</button>
                         <hr class="border-black my-4">
                         <div class="text-center">
@@ -533,77 +531,61 @@ const appId = typeof __app_id !== 'undefined' ? __app_id : 'a-tutto-reality-onli
         const addCharacterRow = (index = null) => {
             const list = document.getElementById('characters-list');
             const div = document.createElement('div');
-            div.className = 'character-row grid grid-cols-1 md:grid-cols-3 gap-2 items-center';
+            div.className = 'character-row grid grid-cols-1 md:grid-cols-6 gap-2 items-center';
             const charIndex = index !== null ? index : list.children.length;
             div.innerHTML = `
-                <input type="text" placeholder="Nome Personaggio ${charIndex + 1}" class="character-name w-full p-2 border-2 border-black rounded" value="Personaggio ${charIndex + 1}">
-                <div class="flex gap-2">
-                    <input type="text" placeholder="URL Immagine" class="character-img-url w-full p-2 border-2 border-black rounded">
-                    <input type="file" class="character-img-file hidden" accept="image/png, image/jpeg, image/gif" id="file-${charIndex}">
-                    <label for="file-${charIndex}" class="btn bg-blue-500 hover:bg-blue-600 text-sm py-1 px-2 cursor-pointer">File</label>
-                </div>
+                <input type="text" placeholder="Nome Personaggio ${charIndex + 1}" class="character-name w-full p-2 border-2 border-black rounded md:col-span-2" value="Personaggio ${charIndex + 1}">
+                <input type="text" placeholder="URL Immagine (obbligatorio)" class="character-img-url w-full p-2 border-2 border-black rounded md:col-span-3">
                 <button type="button" data-action="removeCharacter" class="btn bg-red-500 hover:bg-red-600 text-sm py-1 px-2 justify-self-start md:justify-self-center">X</button>
             `;
             list.appendChild(div);
         };
 
         const createGame = async () => {
-            const characterRows = document.querySelectorAll('.character-row');
-            const characterPromises = Array.from(characterRows).map(async (row, index) => {
-                const nameInput = row.querySelector('.character-name');
-                const urlInput = row.querySelector('.character-img-url');
-                const fileInput = row.querySelector('.character-img-file');
-                const name = nameInput.value.trim() || `Personaggio ${index + 1}`;
-                let img = urlInput.value.trim();
-                if (!img && fileInput.files && fileInput.files[0]) {
-                    try {
-                        img = await new Promise((resolve, reject) => {
-                            const reader = new FileReader();
-                            reader.onload = e => resolve(e.target.result);
-                            reader.onerror = reject;
-                            reader.readAsDataURL(fileInput.files[0]);
-                        });
-                    } catch (error) {
-                        img = null;
-                    }
-                }
-                return { name, img };
-            });
-
-            const resolvedCharacters = await Promise.all(characterPromises);
-            const settings = {
-                playerCount: parseInt(document.getElementById('player-count').value),
-                teamCount: parseInt(document.getElementById('team-count').value),
-                teams: Array.from(document.querySelectorAll('.team-name')).map((input, i) => ({ id: i + 1, name: input.value.trim() || `Team ${i + 1}`, color: `team-color-${i + 1}` })),
-                mergeEpisode: parseInt(document.getElementById('merge-episode').value),
-                returnCount: parseInt(document.getElementById('return-count').value),
-                returnEpisodes: Array.from(document.querySelectorAll('.return-episode')).map(input => parseInt(input.value)),
-                characters: resolvedCharacters,
-            };
-
-            const newGameId = generateId();
-            const hostPlayer = {
-                uid: globalState.currentUser.uid,
-                name: `Anonimo ${Math.floor(Math.random() * 1000)}`,
-                isHost: true,
-                characterIndex: null,
-            };
-
-            const gameData = {
-                id: newGameId,
-                hostId: globalState.currentUser.uid,
-                status: 'waiting',
-                players: [hostPlayer],
-                settings,
-                episode: 1,
-                createdAt: new Date(),
-            };
-            
             try {
+                const characterRows = document.querySelectorAll('.character-row');
+                const characters = Array.from(characterRows).map((row, index) => {
+                    const nameInput = row.querySelector('.character-name');
+                    const urlInput = row.querySelector('.character-img-url');
+                    const name = nameInput.value.trim() || `Personaggio ${index + 1}`;
+                    const img = urlInput.value.trim();
+                    return { name, img };
+                });
+
+                const settings = {
+                    playerCount: parseInt(document.getElementById('player-count').value),
+                    teamCount: parseInt(document.getElementById('team-count').value),
+                    teams: Array.from(document.querySelectorAll('.team-name')).map((input, i) => ({ id: i + 1, name: input.value.trim() || `Team ${i + 1}`, color: `team-color-${i + 1}` })),
+                    mergeEpisode: parseInt(document.getElementById('merge-episode').value),
+                    returnCount: parseInt(document.getElementById('return-count').value),
+                    returnEpisodes: Array.from(document.querySelectorAll('.return-episode')).map(input => parseInt(input.value)),
+                    characters: characters,
+                };
+
+                const newGameId = generateId();
+                const hostPlayer = {
+                    uid: globalState.currentUser.uid,
+                    name: `Anonimo ${Math.floor(Math.random() * 1000)}`,
+                    isHost: true,
+                    characterIndex: null,
+                };
+
+                const gameData = {
+                    id: newGameId,
+                    hostId: globalState.currentUser.uid,
+                    status: 'waiting',
+                    players: [hostPlayer],
+                    settings,
+                    episode: 1,
+                    createdAt: new Date(),
+                };
+            
                 const gameRef = doc(db, `artifacts/${appId}/public/data/games`, newGameId);
                 await setDoc(gameRef, gameData);
                 joinGame(newGameId);
+
             } catch (error) {
+                console.error("Errore dettagliato nella creazione della partita:", error);
                 showModal("Impossibile creare la partita. Controlla la connessione e riprova.");
             }
         };
@@ -887,6 +869,7 @@ const appId = typeof __app_id !== 'undefined' ? __app_id : 'a-tutto-reality-onli
                             await signInAnonymously(auth);
                         }
                     } catch (error) {
+                        console.error("Authentication failed:", error);
                         showModal("Autenticazione fallita. L'app potrebbe non funzionare correttamente.");
                         globalState.currentScreen = 'mainMenu';
                         render();
@@ -906,4 +889,4 @@ const appId = typeof __app_id !== 'undefined' ? __app_id : 'a-tutto-reality-onli
         init();
     </script>
 </body>
-</html>
+</ht
