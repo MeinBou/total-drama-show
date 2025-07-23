@@ -517,13 +517,26 @@
         };
         
         const renderSpectatorView = () => {
-            const { settings, players, votes, status } = globalState.gameData;
+            const { settings, players, votes, status, hostId } = globalState.gameData;
             const getCharacter = (player) => settings.characters[player.characterIndex];
+            const isHost = globalState.currentUser.uid === hostId;
+            let hostControls = '';
+
+            // Aggiungi i controlli per l'host anche se è eliminato
+            if (isHost) {
+                if (status === 'revealed') {
+                    hostControls = `<button data-action="nextEpisode" class="btn mt-6">Prossimo Episodio</button>`;
+                } else if (status === 'challenge_result') {
+                     hostControls = `<button data-action="goToElimination" class="btn mt-6">Vai alla Cerimonia</button>`;
+                }
+                // Aggiungi altri controlli se necessario per altri stati
+            }
             
             let spectatorHtml = `
                 <div class="panel text-center">
                     <h2 class="font-bangers text-5xl text-red-600">SEI STATO ELIMINATO!</h2>
                     <p class="text-xl mt-4">Ora sei uno spettatore. Puoi continuare a guardare la partita e sperare in un ritorno in gara!</p>
+                    <div class="text-center mt-6">${hostControls}</div>
                 </div>
             `;
 
