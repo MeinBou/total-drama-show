@@ -450,34 +450,60 @@
                 return;
             }
 
-            const { settings, players, teams, episode, challengeResult, votes, elimination } = globalState.gameData;
+            const { settings, players, teams, episode, challengeResult, votes, elimination, isMerged, immunePlayerUid } = globalState.gameData;
             const getCharacter = (player) => settings.characters[player.characterIndex];
 
-            const teamsHtml = teams.map(team => {
-                const membersHtml = players
-                    .filter(p => p.teamId === team.id && p.status === 'active')
-                    .map(p => {
-                        const isMyCharacter = myPlayer && p.characterIndex === myPlayer.characterIndex;
-                        const isSafe = elimination && elimination.safePlayers && elimination.safePlayers.includes(p.uid);
-                        let indicatorClass = '';
-                        if (isMyCharacter) indicatorClass = 'my-character-indicator';
-                        if (isSafe) indicatorClass = 'safe-player-indicator';
-                        
-                        return `
-                        <div class="relative flex flex-col items-center text-center ${indicatorClass}" title="${getCharacter(p).name}">
-                            <img src="${getCharacter(p).img || 'https://placehold.co/80x80/e2e8f0/333?text=?'}" onerror="this.onerror=null;this.src='https://placehold.co/80x80/e2e8f0/333?text=Error';" class="w-16 h-16 md:w-20 md:h-20 object-cover rounded-full border-4 border-black">
-                            <p class="font-bold text-sm mt-1 truncate max-w-[80px]">${getCharacter(p).name}</p>
-                            ${isSafe ? '<p class="absolute -bottom-4 font-bangers text-xl text-green-600" style="text-shadow: 1px 1px 0 #fff;">SALVO</p>' : ''}
-                        </div>
-                    `}).join('');
+            let mainContentHtml = '';
 
-                return `
-                    <div class="panel team-color-${team.id} text-white">
-                        <h3 class="font-bangers text-3xl text-center mb-4" style="text-shadow: 2px 2px 0 #000;">Team ${team.name}</h3>
-                        <div class="grid grid-cols-3 sm:grid-cols-4 gap-4">${membersHtml}</div>
+            if (isMerged) {
+                const allPlayersHtml = players.filter(p => p.status === 'active').map(p => {
+                    const isMyCharacter = myPlayer && p.characterIndex === myPlayer.characterIndex;
+                    const isImmune = p.uid === immunePlayerUid;
+                    let indicatorClass = '';
+                    if (isMyCharacter) indicatorClass = 'my-character-indicator';
+                    if (isImmune) indicatorClass = 'immune-player-indicator';
+
+                    return `
+                    <div class="relative flex flex-col items-center text-center ${indicatorClass}" title="${getCharacter(p).name}">
+                        <img src="${getCharacter(p).img || 'https://placehold.co/80x80/e2e8f0/333?text=?'}" onerror="this.onerror=null;this.src='https://placehold.co/80x80/e2e8f0/333?text=Error';" class="w-16 h-16 md:w-20 md:h-20 object-cover rounded-full border-4 border-black">
+                        <p class="font-bold text-sm mt-1 truncate max-w-[80px]">${getCharacter(p).name}</p>
+                        ${isImmune ? '<p class="absolute -bottom-4 font-bangers text-xl text-purple-600" style="text-shadow: 1px 1px 0 #fff;">IMMUNE</p>' : ''}
+                    </div>
+                    `;
+                }).join('');
+                mainContentHtml = `
+                    <div class="panel bg-gray-700 text-white">
+                        <h3 class="font-bangers text-4xl text-center mb-4" style="text-shadow: 2px 2px 0 #000;">MERGE!</h3>
+                        <div class="grid grid-cols-4 sm:grid-cols-6 gap-4">${allPlayersHtml}</div>
                     </div>
                 `;
-            }).join('');
+            } else {
+                 mainContentHtml = teams.map(team => {
+                    const membersHtml = players
+                        .filter(p => p.teamId === team.id && p.status === 'active')
+                        .map(p => {
+                            const isMyCharacter = myPlayer && p.characterIndex === myPlayer.characterIndex;
+                            const isSafe = elimination && elimination.safePlayers && elimination.safePlayers.includes(p.uid);
+                            let indicatorClass = '';
+                            if (isMyCharacter) indicatorClass = 'my-character-indicator';
+                            if (isSafe) indicatorClass = 'safe-player-indicator';
+                            
+                            return `
+                            <div class="relative flex flex-col items-center text-center ${indicatorClass}" title="${getCharacter(p).name}">
+                                <img src="${getCharacter(p).img || 'https://placehold.co/80x80/e2e8f0/333?text=?'}" onerror="this.onerror=null;this.src='https://placehold.co/80x80/e2e8f0/333?text=Error';" class="w-16 h-16 md:w-20 md:h-20 object-cover rounded-full border-4 border-black">
+                                <p class="font-bold text-sm mt-1 truncate max-w-[80px]">${getCharacter(p).name}</p>
+                                ${isSafe ? '<p class="absolute -bottom-4 font-bangers text-xl text-green-600" style="text-shadow: 1px 1px 0 #fff;">SALVO</p>' : ''}
+                            </div>
+                        `}).join('');
+
+                    return `
+                        <div class="panel team-color-${team.id} text-white">
+                            <h3 class="font-bangers text-3xl text-center mb-4" style="text-shadow: 2px 2px 0 #000;">Team ${team.name}</h3>
+                            <div class="grid grid-cols-3 sm:grid-cols-4 gap-4">${membersHtml}</div>
+                        </div>
+                    `;
+                }).join('');
+            }
             
             const isHost = globalState.currentUser.uid === globalState.gameData.hostId;
             let gameControls = '';
@@ -535,7 +561,7 @@
                 <div class="w-full">
                     ${statusMessage}
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                        ${teamsHtml}
+                        ${mainContentHtml}
                     </div>
                     <div class="text-center">
                         ${gameControls}
@@ -548,12 +574,17 @@
         };
         
         const renderSpectatorView = () => {
-            const { settings, players, votes, status, hostId } = globalState.gameData;
-            const getCharacter = (player) => settings.characters[player.characterIndex];
+            const screenHtml = renderGameHtmlForSpectator(); // Funzione helper per non duplicare codice
+            appContainer.innerHTML = renderWithSidePanels(screenHtml);
+            updateChatView();
+        };
+        
+        const renderGameHtmlForSpectator = () => {
+            // Questa funzione costruisce la vista del gioco ma aggiunge i controlli dell'host se necessario
+            const { settings, players, status, hostId } = globalState.gameData;
             const isHost = globalState.currentUser.uid === hostId;
             let hostControls = '';
 
-            // Aggiungi i controlli per l'host anche se è eliminato
             if (isHost) {
                  if (status === 'challenge') {
                     hostControls = `<button data-action="runChallenge" class="btn mt-6">Avvia Sfida</button>`;
@@ -567,38 +598,15 @@
                     hostControls = `<button data-action="nextEpisode" class="btn mt-6">Prossimo Episodio</button>`;
                 }
             }
-            
-            let spectatorHtml = `
+
+            return `
                 <div class="panel text-center">
                     <h2 class="font-bangers text-5xl text-red-600">SEI STATO ELIMINATO!</h2>
-                    <p class="text-xl mt-4">Ora sei uno spettatore. Puoi continuare a guardare la partita e sperare in un ritorno in gara!</p>
+                    <p class="text-xl mt-4">Stai assistendo alla partita come spettatore.</p>
                     <div class="text-center mt-6">${hostControls}</div>
                 </div>
+                ${renderEliminationRanking()}
             `;
-
-            if (status === 'elimination' || status === 'reveal' || status === 'reveal_in_progress' || status === 'revealed') {
-                let votesHtml = 'Nessun voto ancora espresso.';
-                if (votes && Object.keys(votes).length > 0) {
-                    votesHtml = '<ul class="space-y-2 text-left">';
-                    for (const voterUid in votes) {
-                        const voterPlayer = players.find(p => p.uid === voterUid);
-                        const votedPlayer = players.find(p => p.uid === votes[voterUid]);
-                        if (voterPlayer && votedPlayer) {
-                            votesHtml += `<li class="bg-amber-200 p-2 rounded border-2 border-black"><span class="font-bold">${getCharacter(voterPlayer).name}</span> ha votato per <span class="font-bold text-red-600">${getCharacter(votedPlayer).name}</span></li>`;
-                        }
-                    }
-                    votesHtml += '</ul>';
-                }
-                spectatorHtml += `
-                    <div class="panel mt-6">
-                        <h3 class="font-bangers text-3xl text-center mb-4">Voti degli altri giocatori</h3>
-                        ${votesHtml}
-                    </div>
-                `;
-            }
-
-            appContainer.innerHTML = renderWithSidePanels(spectatorHtml);
-            updateChatView();
         };
 
         const renderVoteScreen = () => {
@@ -846,6 +854,7 @@
                     settings,
                     episode: 1,
                     eliminationOrder: [],
+                    isMerged: false,
                     createdAt: new Date(),
                 };
             
@@ -1083,9 +1092,6 @@
         
         const goToElimination = async () => {
             const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
-            await updateDoc(gameRef, { status: 'elimination', votes: {} });
-
-            // SUBITO DOPO, controlla se il team perdente è solo di CPU
             const gameDoc = await getDoc(gameRef);
             if (!gameDoc.exists()) return;
             const gameData = gameDoc.data();
@@ -1096,13 +1102,37 @@
                 p.teamId === challengeResult.losingTeamId
             );
 
-            const hasHumanVoters = atRiskPlayers.some(p => !p.isCpu);
+            if (atRiskPlayers.length === 1) {
+                // Eliminazione automatica
+                const eliminatedUid = atRiskPlayers[0].uid;
+                const updatedPlayers = players.map(p => p.uid === eliminatedUid ? { ...p, status: 'eliminated' } : p);
+                const eliminationOrder = [...(gameData.eliminationOrder || []), eliminatedUid];
+                await updateDoc(gameRef, {
+                    status: 'revealed',
+                    players: updatedPlayers,
+                    elimination: { eliminatedUid, voteCounts: { [eliminatedUid]: 'Auto-eliminato' } },
+                    eliminationOrder
+                });
+                return;
+            }
 
-            if (!hasHumanVoters && atRiskPlayers.length > 0) {
+            await updateDoc(gameRef, { status: 'elimination', votes: {} });
+
+            // SUBITO DOPO, controlla se il team perdente è solo di CPU
+            const updatedGameDoc = await getDoc(gameRef);
+            const updatedGameData = updatedGameDoc.data();
+            const updatedAtRisk = updatedGameData.players.filter(p => 
+                p.status === 'active' && 
+                p.teamId === updatedGameData.challengeResult.losingTeamId
+            );
+
+            const hasHumanVoters = updatedAtRisk.some(p => !p.isCpu);
+
+            if (!hasHumanVoters && updatedAtRisk.length > 0) {
                 // Se non ci sono giocatori umani, simula il voto delle CPU immediatamente
                 const newVotes = {};
-                atRiskPlayers.forEach(voter => {
-                    const potentialTargets = atRiskPlayers.filter(p => p.uid !== voter.uid);
+                updatedAtRisk.forEach(voter => {
+                    const potentialTargets = updatedAtRisk.filter(p => p.uid !== voter.uid);
                     if (potentialTargets.length > 0) {
                         const target = potentialTargets[Math.floor(Math.random() * potentialTargets.length)];
                         newVotes[voter.uid] = target.uid;
@@ -1310,30 +1340,76 @@
         };
         
         const nextEpisode = async () => {
-            const activePlayers = globalState.gameData.players.filter(p => p.status === 'active');
+            const { settings, episode, players, eliminationOrder } = globalState.gameData;
+            const newEpisodeNumber = episode + 1;
             const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
 
-            if (activePlayers.length <= 2) {
-                // Avvia la finale
+            // 1. Controlla se è un episodio di RITORNO
+            if (settings.returnEpisodes && settings.returnEpisodes.includes(newEpisodeNumber)) {
+                const eliminatedPlayers = players.filter(p => p.status === 'eliminated');
+                if (eliminatedPlayers.length > 0) {
+                    const returningPlayer = eliminatedPlayers[Math.floor(Math.random() * eliminatedPlayers.length)];
+                    const updatedPlayers = players.map(p => p.uid === returningPlayer.uid ? { ...p, status: 'active' } : p);
+                    const updatedEliminationOrder = eliminationOrder.filter(uid => uid !== returningPlayer.uid);
+
+                    await updateDoc(gameRef, {
+                        status: 'return_result', // Stato temporaneo per mostrare chi è tornato
+                        players: updatedPlayers,
+                        eliminationOrder: updatedEliminationOrder,
+                        returningPlayerUid: returningPlayer.uid
+                    });
+                    // Dopo un po', si procede
+                    setTimeout(() => nextEpisode(), 5000); // Mostra il risultato per 5 secondi
+                    return;
+                }
+            }
+            
+            // 2. Controlla se è l'episodio del MERGE
+            if (newEpisodeNumber === settings.mergeEpisode) {
+                 const activePlayers = players.filter(p => p.status === 'active');
+                 const immunePlayer = activePlayers[Math.floor(Math.random() * activePlayers.length)];
+                 await updateDoc(gameRef, {
+                    status: 'challenge',
+                    episode: newEpisodeNumber,
+                    isMerged: true,
+                    immunePlayerUid: immunePlayer.uid,
+                    challengeResult: null, 
+                    elimination: null, 
+                    tiebreaker: null,
+                    votes: {} 
+                 });
+                 return;
+            }
+
+            // 3. Logica per episodi POST-MERGE
+            if (globalState.gameData.isMerged) {
+                const activePlayers = players.filter(p => p.status === 'active');
+                if (activePlayers.length <= 2) {
+                    await updateDoc(gameRef, { status: 'finale' }); // Logica finale da implementare
+                    return;
+                }
+                const immunePlayer = activePlayers[Math.floor(Math.random() * activePlayers.length)];
                 await updateDoc(gameRef, {
-                    status: 'finale',
-                    finale: {
-                        players: activePlayers.map(p => ({ uid: p.uid, score: 0, choice: null })),
-                        round: 1,
-                        lastResult: null
-                    }
-                });
-            } else {
-                // Prossimo episodio normale
-                await updateDoc(gameRef, { 
-                    status: 'challenge', 
-                    episode: globalState.gameData.episode + 1, 
+                    status: 'challenge',
+                    episode: newEpisodeNumber,
+                    immunePlayerUid: immunePlayer.uid,
                     challengeResult: null, 
                     elimination: null, 
                     tiebreaker: null,
                     votes: {} 
                 });
+                return;
             }
+
+            // 4. Episodio normale pre-merge
+            await updateDoc(gameRef, { 
+                status: 'challenge', 
+                episode: newEpisodeNumber, 
+                challengeResult: null, 
+                elimination: null, 
+                tiebreaker: null,
+                votes: {} 
+            });
         };
 
         // --- INIZIALIZZAZIONE ---
