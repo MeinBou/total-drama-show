@@ -52,6 +52,9 @@
         .safe-player-indicator img {
             @apply ring-4 ring-green-500 ring-offset-2 ring-offset-amber-100;
         }
+        .immune-player-indicator img {
+            @apply ring-4 ring-purple-500 ring-offset-2 ring-offset-amber-100;
+        }
 
         /* Animazioni */
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -95,6 +98,34 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+
+        // --- DATI PREDEFINITI ---
+        const DEFAULT_CHARACTERS = [
+            { name: "Candace", img: "https://i.pinimg.com/originals/1c/99/dc/1c99dc178ad0635627477c24254be37e.gif" },
+            { name: "Shinobu", img: "https://i.pinimg.com/originals/85/79/8e/85798e1981256fb35437bc755263c199.gif" },
+            { name: "Stellarubia", img: "https://i.pinimg.com/originals/04/ca/52/04ca5288d93bfe2bd47fbfe61c3ab6bd.gif" },
+            { name: "Lisa", img: "https://i.pinimg.com/originals/bb/1e/a0/bb1ea08a3f394a583e49466a27269702.gif" },
+            { name: "Nicole", img: "https://media1.tenor.com/m/hoZOijyaXTMAAAAC/the-amazing-world-of-gumball-nicole-watterson.gif" },
+            { name: "Garnet", img: "https://i.pinimg.com/originals/15/c5/92/15c592711b85314cecc49f4d5cb840e6.gif" },
+            { name: "Wanda", img: "https://media.tenor.com/8GITD5dPhl4AAAAM/wanda-clucking.gif" },
+            { name: "Fiona", img: "https://i.pinimg.com/originals/76/79/0b/76790bf7d2ca51ac60cb2fb22d45d0de.gif" },
+            { name: "Lapis", img: "https://i.pinimg.com/originals/8c/89/b1/8c89b1c86c32046422fdf07cb3f84921.gif" },
+            { name: "Gwen", img: "https://media.tenor.com/83wH-eEZQA4AAAAM/gwen-total-drama.gif" },
+            { name: "Velma", img: "https://i.pinimg.com/originals/d6/88/2c/d6882cd3f134979be924254b186cb01b.gif" },
+            { name: "Gommarosa", img: "https://i.pinimg.com/originals/f0/a2/63/f0/a263c8848f14ba56651023d1afff91.gif" },
+            { name: "Gumball", img: "https://i.pinimg.com/originals/2a/51/64/2a5164c11b0468154dbcef44858e0769.gif" },
+            { name: "Stewie", img: "https://i.pinimg.com/originals/71/96/0f/71960fbdf396f732051c2e88a6c39443.gif" },
+            { name: "Patrick", img: "https://i.pinimg.com/originals/f9/e7/a0/f9e7a02065d880479c13d61b5d60f4f2.gif" },
+            { name: "Superboy", img: "https://i.pinimg.com/originals/94/a7/a7/94a7a7c2ee640fd4bdb9e623138c0467.gif" },
+            { name: "Gatto con gli stivali", img: "https://i.pinimg.com/originals/20/a7/20/20a7208d655c6d8f882fb4dfbacbc9fe.gif" },
+            { name: "Riolu", img: "https://i.pinimg.com/originals/e6/02/5d/e6025d56bfd79ae41e35f042148b57fb.gif" },
+            { name: "Johnny Bravo", img: "https://i.pinimg.com/originals/42/ef/0e/42ef0e9d902e54195316e9e6b5c48384.gif" },
+            { name: "Leone", img: "https://i.pinimg.com/originals/e1/d4/c7/e1d4c7ddfa20bbfdd77b564e548a4c3c.gif" },
+            { name: "Daffy", img: "https://i.pinimg.com/originals/0e/44/5f/0e445f6ddf7edc630ca49d844f58d34d.gif" },
+            { name: "Finn", img: "https://i.pinimg.com/originals/b2/51/17/b25117aace36f09451366283fc495008.gif" },
+            { name: "Robin", img: "https://i.pinimg.com/originals/49/42/73/4942739889be29a32da4a801e2fb4b9b.gif" },
+            { name: "Tenebra", img: "https://i.pinimg.com/originals/41/86/d5/4186d52093b622a9e0d596670cd65a0c.gif" }
+        ];
 
         // --- STATO GLOBALE DELL'APPLICAZIONE ---
         let globalState = {
@@ -253,7 +284,7 @@
                     <form id="create-game-form" class="space-y-6">
                         <div>
                             <label class="block font-bold mb-2">Numero Giocatori (12-24):</label>
-                            <input type="number" id="player-count" value="12" min="12" max="24" class="w-full p-2 border-2 border-black rounded">
+                            <input type="number" id="player-count" value="24" min="12" max="24" class="w-full p-2 border-2 border-black rounded">
                         </div>
                         <div>
                             <label class="block font-bold mb-2">Numero Team (2-4):</label>
@@ -495,8 +526,8 @@
             } else if (status === 'revealed') {
                 const eliminatedPlayer = players.find(p => p.uid === elimination.eliminatedUid);
                 const eliminatedChar = getCharacter(eliminatedPlayer);
-                const votesForEliminated = elimination.voteCounts[elimination.eliminatedUid] || 0;
-                 statusMessage = `<h2 class="font-bangers text-5xl text-center my-4 text-red-700">${eliminatedChar.name} è stato eliminato con ${votesForEliminated} voti!</h2>`;
+                const votesForEliminated = elimination.voteCounts[elimination.eliminatedUid] === 'Spareggio' ? 'allo spareggio' : `con ${elimination.voteCounts[elimination.eliminatedUid]} voti`;
+                 statusMessage = `<h2 class="font-bangers text-5xl text-center my-4 text-red-700">${eliminatedChar.name} è stato eliminato ${votesForEliminated}!</h2>`;
                  if(isHost) gameControls = `<button data-action="nextEpisode" class="btn mt-6">Prossimo Episodio</button>`;
             }
 
@@ -524,12 +555,17 @@
 
             // Aggiungi i controlli per l'host anche se è eliminato
             if (isHost) {
-                if (status === 'revealed') {
-                    hostControls = `<button data-action="nextEpisode" class="btn mt-6">Prossimo Episodio</button>`;
+                 if (status === 'challenge') {
+                    hostControls = `<button data-action="runChallenge" class="btn mt-6">Avvia Sfida</button>`;
                 } else if (status === 'challenge_result') {
                      hostControls = `<button data-action="goToElimination" class="btn mt-6">Vai alla Cerimonia</button>`;
+                } else if (status === 'reveal') {
+                    hostControls = `<button data-action="startVoteReveal" class="btn mt-6">Inizia a Rivelare i Voti</button>`;
+                } else if (status === 'reveal_in_progress') {
+                    hostControls = `<button data-action="revealNextSafe" class="btn mt-6">Rivela Prossimo Salvo</button>`;
+                } else if (status === 'revealed') {
+                    hostControls = `<button data-action="nextEpisode" class="btn mt-6">Prossimo Episodio</button>`;
                 }
-                // Aggiungi altri controlli se necessario per altri stati
             }
             
             let spectatorHtml = `
@@ -760,12 +796,14 @@
 
         const addCharacterRow = (index = null) => {
             const list = document.getElementById('characters-list');
+            const charIndex = index !== null ? index : list.children.length;
+            const defaultChar = DEFAULT_CHARACTERS[charIndex] || { name: `Personaggio ${charIndex + 1}`, img: '' };
+            
             const div = document.createElement('div');
             div.className = 'character-row grid grid-cols-1 md:grid-cols-6 gap-2 items-center';
-            const charIndex = index !== null ? index : list.children.length;
             div.innerHTML = `
-                <input type="text" placeholder="Nome Personaggio ${charIndex + 1}" class="character-name w-full p-2 border-2 border-black rounded md:col-span-2" value="Personaggio ${charIndex + 1}">
-                <input type="text" placeholder="URL Immagine (obbligatorio)" class="character-img-url w-full p-2 border-2 border-black rounded md:col-span-3">
+                <input type="text" placeholder="Nome Personaggio" class="character-name w-full p-2 border-2 border-black rounded md:col-span-2" value="${defaultChar.name}">
+                <input type="text" placeholder="URL Immagine (obbligatorio)" class="character-img-url w-full p-2 border-2 border-black rounded md:col-span-3" value="${defaultChar.img}">
                 <button type="button" data-action="removeCharacter" class="btn bg-red-500 hover:bg-red-600 text-sm py-1 px-2 justify-self-start md:justify-self-center">X</button>
             `;
             list.appendChild(div);
