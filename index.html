@@ -49,6 +49,9 @@
         .my-character-indicator img {
             @apply ring-4 ring-yellow-400 ring-offset-2 ring-offset-amber-100;
         }
+        .safe-player-indicator img {
+            @apply ring-4 ring-green-500 ring-offset-2 ring-offset-amber-100;
+        }
 
         /* Animazioni */
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -364,9 +367,14 @@
         };
         
         const renderGame = () => {
-            const { settings, players, teams, episode, status, challengeResult, votes, eliminatedThisRound } = globalState.gameData;
+            const { settings, players, teams, episode, status, challengeResult, votes, elimination } = globalState.gameData;
             const myPlayer = players.find(p => p.uid === globalState.currentUser.uid);
             
+            if (myPlayer.status === 'eliminated') {
+                renderSpectatorView();
+                return;
+            }
+
             const getCharacter = (player) => settings.characters[player.characterIndex];
 
             const teamsHtml = teams.map(team => {
@@ -374,10 +382,16 @@
                     .filter(p => p.teamId === team.id && p.status === 'active')
                     .map(p => {
                         const isMyCharacter = myPlayer && p.characterIndex === myPlayer.characterIndex;
+                        const isSafe = elimination && elimination.safePlayers && elimination.safePlayers.includes(p.uid);
+                        let indicatorClass = '';
+                        if (isMyCharacter) indicatorClass = 'my-character-indicator';
+                        if (isSafe) indicatorClass = 'safe-player-indicator';
+                        
                         return `
-                        <div class="flex flex-col items-center text-center ${isMyCharacter ? 'my-character-indicator' : ''}" title="${getCharacter(p).name}">
+                        <div class="relative flex flex-col items-center text-center ${indicatorClass}" title="${getCharacter(p).name}">
                             <img src="${getCharacter(p).img || 'https://placehold.co/80x80/e2e8f0/333?text=?'}" onerror="this.onerror=null;this.src='https://placehold.co/80x80/e2e8f0/333?text=Error';" class="w-16 h-16 md:w-20 md:h-20 object-cover rounded-full border-4 border-black">
                             <p class="font-bold text-sm mt-1 truncate max-w-[80px]">${getCharacter(p).name}</p>
+                            ${isSafe ? '<p class="absolute -bottom-4 font-bangers text-xl text-green-600" style="text-shadow: 1px 1px 0 #fff;">SALVO</p>' : ''}
                         </div>
                     `}).join('');
 
@@ -418,10 +432,23 @@
                     statusMessage += `<p class="text-center font-bold">Il tuo team è salvo! Attendi l'esito della votazione.</p>`;
                 }
             } else if (status === 'reveal') {
-                 statusMessage = `<h2 class="font-bangers text-5xl text-center my-4">Il Momento della Verità...</h2>`;
-                 if(isHost) gameControls = `<button data-action="revealVotes" class="btn mt-6">Rivela i Voti</button>`;
+                 statusMessage = `<h2 class="font-bangers text-5xl text-center my-4">Il Momento della Verità...</h2><p class="text-center">L'host sta per rivelare i voti...</p>`;
+                 if(isHost) gameControls = `<button data-action="startVoteReveal" class="btn mt-6">Inizia a Rivelare i Voti</button>`;
+            } else if (status === 'reveal_in_progress') {
+                const lastSafePlayerUid = elimination.safePlayers[elimination.safePlayers.length - 1];
+                const lastSafePlayer = players.find(p => p.uid === lastSafePlayerUid);
+                const lastSafeCharacter = getCharacter(lastSafePlayer);
+                const votesForSafe = elimination.voteCounts[lastSafePlayerUid] || 0;
+                statusMessage = `<h2 class="font-bangers text-4xl text-center my-4">${lastSafeCharacter.name} è salvo con ${votesForSafe} voti!</h2>`;
+
+                if(elimination.atRisk.length === 2) {
+                    statusMessage += `<p class="font-bangers text-3xl text-center text-red-600 my-4">Siamo arrivati agli ultimi due...</p>`;
+                }
+
+                if(isHost) gameControls = `<button data-action="revealNextSafe" class="btn mt-6">Rivela Prossimo Salvo</button>`;
+
             } else if (status === 'revealed') {
-                const eliminatedPlayer = players.find(p => p.uid === eliminatedThisRound);
+                const eliminatedPlayer = players.find(p => p.uid === elimination.eliminatedUid);
                 const eliminatedChar = getCharacter(eliminatedPlayer);
                  statusMessage = `<h2 class="font-bangers text-5xl text-center my-4 text-red-700">${eliminatedChar.name} è stato eliminato!</h2>`;
                  if(isHost) gameControls = `<button data-action="nextEpisode" class="btn mt-6">Prossimo Episodio</button>`;
@@ -439,6 +466,42 @@
                 </div>
             `;
             appContainer.innerHTML = renderWithChat(screenHtml);
+            updateChatView();
+        };
+        
+        const renderSpectatorView = () => {
+            const { settings, players, votes, status } = globalState.gameData;
+            const getCharacter = (player) => settings.characters[player.characterIndex];
+            
+            let spectatorHtml = `
+                <div class="panel text-center">
+                    <h2 class="font-bangers text-5xl text-red-600">SEI STATO ELIMINATO!</h2>
+                    <p class="text-xl mt-4">Ora sei uno spettatore. Puoi continuare a guardare la partita e sperare in un ritorno in gara!</p>
+                </div>
+            `;
+
+            if (status === 'elimination' || status === 'reveal' || status === 'reveal_in_progress' || status === 'revealed') {
+                let votesHtml = 'Nessun voto ancora espresso.';
+                if (votes && Object.keys(votes).length > 0) {
+                    votesHtml = '<ul class="space-y-2 text-left">';
+                    for (const voterUid in votes) {
+                        const voterPlayer = players.find(p => p.uid === voterUid);
+                        const votedPlayer = players.find(p => p.uid === votes[voterUid]);
+                        if (voterPlayer && votedPlayer) {
+                            votesHtml += `<li class="bg-amber-200 p-2 rounded border-2 border-black"><span class="font-bold">${getCharacter(voterPlayer).name}</span> ha votato per <span class="font-bold text-red-600">${getCharacter(votedPlayer).name}</span></li>`;
+                        }
+                    }
+                    votesHtml += '</ul>';
+                }
+                spectatorHtml += `
+                    <div class="panel mt-6">
+                        <h3 class="font-bangers text-3xl text-center mb-4">Voti degli altri giocatori</h3>
+                        ${votesHtml}
+                    </div>
+                `;
+            }
+
+            appContainer.innerHTML = renderWithChat(spectatorHtml);
             updateChatView();
         };
 
@@ -489,7 +552,8 @@
                 case 'runChallenge': runChallenge(); break;
                 case 'goToElimination': goToElimination(); break;
                 case 'votePlayer': submitVote(uid); break;
-                case 'revealVotes': revealVotes(); break;
+                case 'startVoteReveal': startVoteReveal(); break;
+                case 'revealNextSafe': revealNextSafe(); break;
                 case 'nextEpisode': nextEpisode(); break;
             }
         };
@@ -677,7 +741,7 @@
             switch(status){
                 case 'waiting': return 'lobby';
                 case 'character-selection': return 'characterSelection';
-                case 'challenge': case 'challenge_result': case 'elimination': case 'reveal': case 'revealed': return 'game';
+                case 'challenge': case 'challenge_result': case 'elimination': case 'reveal': case 'reveal_in_progress': case 'revealed': return 'game';
                 default: return 'mainMenu';
             }
         };
@@ -790,6 +854,12 @@
         };
 
         const submitVote = async (votedPlayerUid) => {
+            const myPlayer = globalState.gameData.players.find(p => p.uid === globalState.currentUser.uid);
+            if (myPlayer.status === 'eliminated') {
+                showModal("Non puoi votare, sei stato eliminato!");
+                return;
+            }
+
             const myUid = globalState.currentUser.uid;
             const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
             await updateDoc(gameRef, { [`votes.${myUid}`]: votedPlayerUid });
@@ -827,33 +897,75 @@
             }
         };
 
-        const revealVotes = async () => {
-            const { players, votes } = globalState.gameData;
+        const startVoteReveal = async () => {
+            const { players, votes, challengeResult } = globalState.gameData;
+            
+            // Calcola i voti solo per i giocatori a rischio
+            const atRiskPlayers = players.filter(p => p.status === 'active' && challengeResult.losingTeamIds.includes(p.teamId));
             const voteCounts = {};
+            atRiskPlayers.forEach(p => voteCounts[p.uid] = 0); // Inizializza tutti a 0
+
             for(const voterUid in votes) {
                 const votedUid = votes[voterUid];
-                voteCounts[votedUid] = (voteCounts[votedUid] || 0) + 1;
-            }
-
-            let maxVotes = -1, tiedPlayers = [];
-            for (const uid in voteCounts) {
-                if (voteCounts[uid] > maxVotes) {
-                    maxVotes = voteCounts[uid];
-                    tiedPlayers = [uid];
-                } else if (voteCounts[uid] === maxVotes) {
-                    tiedPlayers.push(uid);
+                if(voteCounts.hasOwnProperty(votedUid)) {
+                    voteCounts[votedUid]++;
                 }
             }
-            const eliminatedUid = tiedPlayers.length > 0 ? tiedPlayers[Math.floor(Math.random() * tiedPlayers.length)] : null;
-            
-            const updatedPlayers = players.map(p => p.uid === eliminatedUid ? { ...p, status: 'eliminated' } : p);
+
+            // Ordina i giocatori a rischio per numero di voti (ascendente)
+            const sortedAtRiskUids = atRiskPlayers.map(p => p.uid).sort((a, b) => voteCounts[a] - voteCounts[b]);
+
             const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
-            await updateDoc(gameRef, { status: 'revealed', players: updatedPlayers, eliminatedThisRound: eliminatedUid, voteCounts });
+            await updateDoc(gameRef, {
+                status: 'reveal_in_progress',
+                elimination: {
+                    atRisk: sortedAtRiskUids,
+                    safePlayers: [],
+                    voteCounts: voteCounts,
+                    eliminatedUid: null
+                }
+            });
+            // La prima rivelazione avviene subito dopo
+            revealNextSafe();
+        };
+
+        const revealNextSafe = async () => {
+            const { elimination, players } = globalState.gameData;
+            const atRiskUids = elimination.atRisk;
+            const safePlayers = elimination.safePlayers;
+
+            if (atRiskUids.length - safePlayers.length <= 1) {
+                // Rimane solo l'eliminato
+                const eliminatedUid = atRiskUids.find(uid => !safePlayers.includes(uid));
+                const updatedPlayers = players.map(p => p.uid === eliminatedUid ? { ...p, status: 'eliminated' } : p);
+                
+                const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+                await updateDoc(gameRef, {
+                    status: 'revealed',
+                    players: updatedPlayers,
+                    'elimination.eliminatedUid': eliminatedUid
+                });
+            } else {
+                // Rivela il prossimo giocatore salvo
+                const nextSafeUid = atRiskUids[safePlayers.length];
+                const updatedSafePlayers = [...safePlayers, nextSafeUid];
+                
+                const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+                await updateDoc(gameRef, {
+                    'elimination.safePlayers': updatedSafePlayers
+                });
+            }
         };
         
         const nextEpisode = async () => {
             const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
-            await updateDoc(gameRef, { status: 'challenge', episode: globalState.gameData.episode + 1, challengeResult: null, eliminatedThisRound: null, voteCounts: null, votes: {} });
+            await updateDoc(gameRef, { 
+                status: 'challenge', 
+                episode: globalState.gameData.episode + 1, 
+                challengeResult: null, 
+                elimination: null, 
+                votes: {} 
+            });
         };
 
         // --- INIZIALIZZAZIONE ---
@@ -863,11 +975,8 @@
                     globalState.currentUser = user;
                 } else {
                     try {
-                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                            await signInWithCustomToken(auth, __initial_auth_token);
-                        } else {
-                            await signInAnonymously(auth);
-                        }
+                        // L'autenticazione anonima è gestita direttamente da Firebase
+                        await signInAnonymously(auth);
                     } catch (error) {
                         console.error("Authentication failed:", error);
                         showModal("Autenticazione fallita. L'app potrebbe non funzionare correttamente.");
@@ -889,4 +998,4 @@
         init();
     </script>
 </body>
-</ht
+</html>
