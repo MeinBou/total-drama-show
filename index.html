@@ -1529,7 +1529,13 @@
             if (globalState.gameData.isMerged) {
                 const activePlayers = players.filter(p => p.status === 'active');
                 if (activePlayers.length <= 2) {
-                    await updateDoc(gameRef, { status: 'finale' }); // Logica finale da implementare
+                    await updateDoc(gameRef, { status: 'finale',
+                        finale: {
+                            players: activePlayers.map(p => ({ uid: p.uid, score: 0, choice: null })),
+                            round: 1,
+                            lastResult: null
+                        }
+                    }); 
                     return;
                 }
                 const immunePlayer = activePlayers[Math.floor(Math.random() * activePlayers.length)];
