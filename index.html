@@ -432,29 +432,20 @@
         };
         
         const renderGame = () => {
-            const { status } = globalState.gameData;
             const myPlayer = globalState.gameData.players.find(p => p.uid === globalState.currentUser.uid);
-            
             if (myPlayer.status === 'eliminated') {
                 renderSpectatorView();
                 return;
             }
-
-            if (status === 'finale') {
-                renderFinale();
-                return;
-            }
             
-            if (status === 'tiebreaker') {
-                renderTiebreaker();
-                return;
-            }
+            const { status } = globalState.gameData;
+            if (status === 'finale') { renderFinale(); return; }
+            if (status === 'tiebreaker') { renderTiebreaker(); return; }
 
             const { settings, players, teams, episode, challengeResult, votes, elimination, isMerged, immunePlayerUid } = globalState.gameData;
             const getCharacter = (player) => settings.characters[player.characterIndex];
 
             let mainContentHtml = '';
-
             if (isMerged) {
                 const allPlayersHtml = players.filter(p => p.status === 'active').map(p => {
                     const isMyCharacter = myPlayer && p.characterIndex === myPlayer.characterIndex;
@@ -522,17 +513,10 @@
                 `;
                 if(isHost) gameControls = `<button data-action="goToElimination" class="btn mt-6">Vai alla Cerimonia</button>`;
             } else if (status === 'elimination') {
-                const losingTeam = teams.find(t => challengeResult.losingTeamId === t.id);
-                statusMessage = `<h2 class="font-bangers text-5xl text-center my-4 text-red-600">Cerimonia di Eliminazione per il Team: ${losingTeam.name}!</h2>`;
-                
-                const myTeamId = myPlayer.teamId;
-                if(challengeResult.losingTeamId === myTeamId){
-                    const alreadyVoted = votes && votes[myPlayer.uid];
-                    if(alreadyVoted) statusMessage += `<p class="text-center font-bold">Hai votato. In attesa degli altri...</p>`;
-                    else statusMessage += renderVoteScreen();
-                } else {
-                    statusMessage += `<p class="text-center font-bold">Il tuo team è salvo! Attendi l'esito della votazione.</p>`;
-                }
+                statusMessage = `<h2 class="font-bangers text-5xl text-center my-4 text-red-600">Cerimonia di Eliminazione!</h2>`;
+                const alreadyVoted = votes && votes[myPlayer.uid];
+                if(alreadyVoted) statusMessage += `<p class="text-center font-bold">Hai votato. In attesa degli altri...</p>`;
+                else statusMessage += renderVoteScreen();
             } else if (status === 'reveal') {
                  statusMessage = `<h2 class="font-bangers text-5xl text-center my-4">Il Momento della Verità...</h2><p class="text-center">L'host sta per rivelare i voti...</p>`;
                  if(isHost) gameControls = `<button data-action="startVoteReveal" class="btn mt-6">Inizia a Rivelare i Voti</button>`;
@@ -560,7 +544,7 @@
             const screenHtml = `
                 <div class="w-full">
                     ${statusMessage}
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                    <div class="grid grid-cols-1 ${isMerged ? '' : 'md:grid-cols-2'} gap-6 mt-6">
                         ${mainContentHtml}
                     </div>
                     <div class="text-center">
@@ -580,9 +564,9 @@
         };
         
         const renderGameHtmlForSpectator = () => {
-            // Questa funzione costruisce la vista del gioco ma aggiunge i controlli dell'host se necessario
-            const { settings, players, status, hostId } = globalState.gameData;
+            const { settings, players, status, hostId, teams, isMerged, immunePlayerUid, elimination } = globalState.gameData;
             const isHost = globalState.currentUser.uid === hostId;
+            const getCharacter = (player) => settings.characters[player.characterIndex];
             let hostControls = '';
 
             if (isHost) {
@@ -598,24 +582,58 @@
                     hostControls = `<button data-action="nextEpisode" class="btn mt-6">Prossimo Episodio</button>`;
                 }
             }
+            
+            let mainContentHtml = '';
+            if (isMerged) {
+                const allPlayersHtml = players.filter(p => p.status === 'active').map(p => {
+                    const isImmune = p.uid === immunePlayerUid;
+                    return `
+                    <div class="relative flex flex-col items-center text-center ${isImmune ? 'immune-player-indicator' : ''}" title="${getCharacter(p).name}">
+                        <img src="${getCharacter(p).img || 'https://placehold.co/80x80/e2e8f0/333?text=?'}" onerror="this.onerror=null;this.src='https://placehold.co/80x80/e2e8f0/333?text=Error';" class="w-16 h-16 md:w-20 md:h-20 object-cover rounded-full border-4 border-black">
+                        <p class="font-bold text-sm mt-1 truncate max-w-[80px]">${getCharacter(p).name}</p>
+                        ${isImmune ? '<p class="absolute -bottom-4 font-bangers text-xl text-purple-600" style="text-shadow: 1px 1px 0 #fff;">IMMUNE</p>' : ''}
+                    </div>
+                    `;
+                }).join('');
+                mainContentHtml = `<div class="panel bg-gray-700 text-white"><h3 class="font-bangers text-4xl text-center mb-4" style="text-shadow: 2px 2px 0 #000;">MERGE!</h3><div class="grid grid-cols-4 sm:grid-cols-6 gap-4">${allPlayersHtml}</div></div>`;
+            } else if (teams) {
+                 mainContentHtml = teams.map(team => {
+                    const membersHtml = players.filter(p => p.teamId === team.id && p.status === 'active').map(p => {
+                        const isSafe = elimination && elimination.safePlayers && elimination.safePlayers.includes(p.uid);
+                        return `
+                        <div class="relative flex flex-col items-center text-center ${isSafe ? 'safe-player-indicator' : ''}" title="${getCharacter(p).name}">
+                            <img src="${getCharacter(p).img || 'https://placehold.co/80x80/e2e8f0/333?text=?'}" onerror="this.onerror=null;this.src='https://placehold.co/80x80/e2e8f0/333?text=Error';" class="w-16 h-16 md:w-20 md:h-20 object-cover rounded-full border-4 border-black">
+                            <p class="font-bold text-sm mt-1 truncate max-w-[80px]">${getCharacter(p).name}</p>
+                            ${isSafe ? '<p class="absolute -bottom-4 font-bangers text-xl text-green-600" style="text-shadow: 1px 1px 0 #fff;">SALVO</p>' : ''}
+                        </div>
+                    `}).join('');
+                    return `<div class="panel team-color-${team.id} text-white"><h3 class="font-bangers text-3xl text-center mb-4" style="text-shadow: 2px 2px 0 #000;">Team ${team.name}</h3><div class="grid grid-cols-3 sm:grid-cols-4 gap-4">${membersHtml}</div></div>`;
+                }).join('');
+            }
 
             return `
                 <div class="panel text-center">
                     <h2 class="font-bangers text-5xl text-red-600">SEI STATO ELIMINATO!</h2>
                     <p class="text-xl mt-4">Stai assistendo alla partita come spettatore.</p>
-                    <div class="text-center mt-6">${hostControls}</div>
                 </div>
+                <div class="grid grid-cols-1 ${isMerged ? '' : 'md:grid-cols-2'} gap-6 mt-6">${mainContentHtml}</div>
+                <div class="text-center mt-6">${hostControls}</div>
                 ${renderEliminationRanking()}
             `;
         };
 
         const renderVoteScreen = () => {
-            const { players, settings } = globalState.gameData;
+            const { players, settings, isMerged, immunePlayerUid } = globalState.gameData;
             const myPlayer = players.find(p => p.uid === globalState.currentUser.uid);
-            const losingTeamPlayers = players.filter(p => p.teamId === myPlayer.teamId && p.status === 'active');
+            
+            let voteOptions;
+            if (isMerged) {
+                voteOptions = players.filter(p => p.status === 'active' && p.uid !== myPlayer.uid && p.uid !== immunePlayerUid);
+            } else {
+                voteOptions = players.filter(p => p.teamId === myPlayer.teamId && p.status === 'active' && p.uid !== myPlayer.uid);
+            }
 
-            const voteOptionsHtml = losingTeamPlayers.map(p => {
-                if(p.uid === myPlayer.uid) return ''; // Non puoi votare te stesso
+            const voteOptionsHtml = voteOptions.map(p => {
                 const character = settings.characters[p.characterIndex];
                 return `
                     <div data-action="votePlayer" data-uid="${p.uid}" class="character-card bg-amber-200">
@@ -627,7 +645,7 @@
 
             return `
                 <div class="panel mt-6 max-w-3xl mx-auto">
-                    <h3 class="font-bangers text-3xl text-center mb-4">Vota chi eliminare dal tuo team!</h3>
+                    <h3 class="font-bangers text-3xl text-center mb-4">Vota chi eliminare!</h3>
                     <div class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                         ${voteOptionsHtml}
                     </div>
@@ -1079,15 +1097,18 @@
         };
 
         const runChallenge = async () => {
-            const { teams } = globalState.gameData;
-            const teamIds = teams.map(t => t.id);
-            const losingTeamIndex = Math.floor(Math.random() * teamIds.length);
-            const losingTeamId = teamIds[losingTeamIndex];
-            
-            const winningTeamIds = teamIds.filter(id => id !== losingTeamId);
-
+            const { teams, isMerged } = globalState.gameData;
             const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
-            await updateDoc(gameRef, { status: 'challenge_result', challengeResult: { winningTeamIds, losingTeamId } });
+
+            if (isMerged) {
+                await updateDoc(gameRef, { status: 'elimination', votes: {} });
+            } else {
+                const teamIds = teams.map(t => t.id);
+                const losingTeamIndex = Math.floor(Math.random() * teamIds.length);
+                const losingTeamId = teamIds[losingTeamIndex];
+                const winningTeamIds = teamIds.filter(id => id !== losingTeamId);
+                await updateDoc(gameRef, { status: 'challenge_result', challengeResult: { winningTeamIds, losingTeamId } });
+            }
         };
         
         const goToElimination = async () => {
@@ -1163,14 +1184,25 @@
             if (!gameDoc.exists()) return;
             const gameData = gameDoc.data();
 
-            const { players, challengeResult, votes } = gameData;
-            const voters = players.filter(p => p.status === 'active' && p.teamId === challengeResult.losingTeamId);
+            const { players, challengeResult, votes, isMerged, immunePlayerUid } = gameData;
+            
+            let voters;
+            if (isMerged) {
+                voters = players.filter(p => p.status === 'active');
+            } else {
+                voters = players.filter(p => p.status === 'active' && p.teamId === challengeResult.losingTeamId);
+            }
 
             const batch = writeBatch(db);
             let cpuVoted = false;
             voters.forEach(voter => {
                 if (voter.isCpu && !votes[voter.uid]) {
-                    const potentialTargets = players.filter(p => p.status === 'active' && p.teamId === voter.teamId && p.uid !== voter.uid);
+                    let potentialTargets;
+                    if (isMerged) {
+                        potentialTargets = players.filter(p => p.status === 'active' && p.uid !== voter.uid && p.uid !== immunePlayerUid);
+                    } else {
+                        potentialTargets = players.filter(p => p.status === 'active' && p.teamId === voter.teamId && p.uid !== voter.uid);
+                    }
                     if (potentialTargets.length > 0) {
                         const target = potentialTargets[Math.floor(Math.random() * potentialTargets.length)];
                         batch.update(gameRef, { [`votes.${voter.uid}`]: target.uid });
@@ -1182,16 +1214,28 @@
 
             const finalDoc = await getDoc(gameRef);
             const finalData = finalDoc.data();
-            const finalVoters = finalData.players.filter(p => p.status === 'active' && finalData.challengeResult.losingTeamId === p.teamId);
+            let finalVoters;
+            if (isMerged) {
+                finalVoters = finalData.players.filter(p => p.status === 'active');
+            } else {
+                finalVoters = finalData.players.filter(p => p.status === 'active' && finalData.challengeResult.losingTeamId === p.teamId);
+            }
+
             if (finalVoters.length === Object.keys(finalData.votes).length) {
                 await updateDoc(gameRef, { status: 'reveal' });
             }
         };
 
         const startVoteReveal = async () => {
-            const { players, votes, challengeResult } = globalState.gameData;
+            const { players, votes, challengeResult, isMerged } = globalState.gameData;
             
-            const atRiskPlayers = players.filter(p => p.status === 'active' && p.teamId === challengeResult.losingTeamId);
+            let atRiskPlayers;
+            if (isMerged) {
+                atRiskPlayers = players.filter(p => p.status === 'active');
+            } else {
+                atRiskPlayers = players.filter(p => p.status === 'active' && p.teamId === challengeResult.losingTeamId);
+            }
+            
             const voteCounts = {};
             atRiskPlayers.forEach(p => voteCounts[p.uid] = 0); 
 
