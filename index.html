@@ -100,7 +100,7 @@
         const db = getFirestore(app);
 
         // --- DATI PREDEFINITI ---
-        const DEFAULT_CHARACTERS = [
+        const FULL_CHARACTER_POOL = [
             { name: "Candace", img: "https://i.pinimg.com/originals/1c/99/dc/1c99dc178ad0635627477c24254be37e.gif" },
             { name: "Shinobu", img: "https://i.pinimg.com/originals/85/79/8e/85798e1981256fb35437bc755263c199.gif" },
             { name: "Stellarubia", img: "https://i.pinimg.com/originals/04/ca/52/04ca5288d93bfe2bd47fbfe61c3ab6bd.gif" },
@@ -124,7 +124,33 @@
             { name: "Daffy", img: "https://i.pinimg.com/originals/0e/44/5f/0e445f6ddf7edc630ca49d844f58d34d.gif" },
             { name: "Finn", img: "https://i.pinimg.com/originals/b2/51/17/b25117aace36f09451366283fc495008.gif" },
             { name: "Robin", img: "https://i.pinimg.com/originals/49/42/73/4942739889be29a32da4a801e2fb4b9b.gif" },
-            { name: "Tenebra", img: "https://i.pinimg.com/originals/41/86/d5/4186d52093b622a9e0d596670cd65a0c.gif" }
+            { name: "Tenebra", img: "https://i.pinimg.com/originals/41/86/d5/4186d52093b622a9e0d596670cd65a0c.gif" },
+            { name: "Corvina", img: "https://media.tenor.com/ISJbIzN97cgAAAAM/raven-teen-titans.gif" },
+            { name: "Rose Quartz", img: "https://i.pinimg.com/originals/8b/27/33/8b2733b306c721fa069775d0829ca17e.gif" },
+            { name: "Orso Bianco", img: "https://i.pinimg.com/originals/43/a3/7f/43a37f37dee174a7548bbb42e25fdcf4.gif" },
+            { name: "Carlos", img: "https://i.pinimg.com/originals/32/0d/d1/320dd13031f1aba8a2d3d9b9837174f4.gif" },
+            { name: "Leon", img: "https://i.pinimg.com/originals/ad/58/df/ad58dfbdc13b5ed3ac50f7f5cd8984fb.gif" },
+            { name: "Robot Boy", img: "https://i.pinimg.com/originals/79/a0/4e/79a04e45499fdeba56c62a0465101e58.gif" },
+            { name: "Spongebob", img: "https://i.pinimg.com/originals/4c/74/21/4c742132b3f7018e49ae1901a2ab3e68.gif" },
+            { name: "Rosalinda", img: "https://i.pinimg.com/originals/37/6b/2c/376b2cfa68dcb3b52e4e309d5a29ad49.gif" },
+            { name: "Bloom", img: "https://i.pinimg.com/originals/2a/32/55/2a325525e2f610702d3ca4458be37a51.gif" },
+            { name: "Ponygon", img: "https://i.pinimg.com/originals/d3/70/64/d37064767df0ef73ec0602aa7b858967.gif" },
+            { name: "Francine", img: "https://i.pinimg.com/originals/fd/22/19/fd2219f7edf041a1982a234cb1fbbe00.gif" },
+            { name: "Roger", img: "https://i.pinimg.com/originals/f7/46/d9/f746d9350dbc2bf82e10b4596d192db0.gif" },
+            { name: "Ben 10", img: "https://i.pinimg.com/originals/7e/ea/10/7eea10f977a11a928eb203fe887e4522.gif" },
+            { name: "Androide 18", img: "https://i.pinimg.com/originals/65/74/e1/6574e1409f35f8ec1e626c1f69b04858.gif" },
+            { name: "Timmy", img: "https://i.pinimg.com/originals/5e/d9/33/5ed933a2f1b50617533feea46bbfc3d0.gif" },
+            { name: "Clarence", img: "https://i.pinimg.com/originals/7a/dd/7b/7add7b7b3d85d034780220623f08aba2.gif" },
+            { name: "Mordecai", img: "https://i.pinimg.com/originals/f4/ed/a8/f4eda82fa731f8b677cecedbcd1d358b.gif" },
+            { name: "Ellis", img: "https://i.pinimg.com/originals/3b/10/2c/3b102c22d54b391bfb50b1bbf75d3c43.gif" },
+            { name: "Daphne", img: "https://i.pinimg.com/originals/f1/cd/c8/f1cdc823a641797c38d3a26f6f9e4914.gif" },
+            { name: "Tecna", img: "https://i.pinimg.com/originals/43/44/da/4344da043aec0946577af8dba8bee564.gif" },
+            { name: "Zatch Bell", img: "https://i.pinimg.com/originals/c4/c7/63/c4c76304a85365557533f04bc2e07d21.gif" },
+            { name: "Shizuka", img: "https://i.pinimg.com/originals/68/8b/f3/688bf3cd0803d0ba7b3c7b1f8c0f8cf0.gif" },
+            { name: "Perry", img: "https://i.pinimg.com/originals/56/27/82/562782974be6adfdd03b37aa807dd2c1.gif" },
+            { name: "Mabel", img: "https://i.pinimg.com/originals/16/c6/f4/16c6f49f87040238b1ee63152f65eb6d.gif" },
+            { name: "Heather", img: "https://media.tenor.com/IwBy4Qxyus4AAAAM/heather-heathertotaldrama.gif" },
+            { name: "Danny Phantom", img: "https://i.pinimg.com/originals/22/99/8e/22998efdb246a5c9c79c1173684981f8.gif" }
         ];
 
         // --- STATO GLOBALE DELL'APPLICAZIONE ---
@@ -283,8 +309,8 @@
                     <h2 class="font-bangers text-4xl text-center mb-6">Crea la tua Partita</h2>
                     <form id="create-game-form" class="space-y-6">
                         <div>
-                            <label class="block font-bold mb-2">Numero Giocatori (12-24):</label>
-                            <input type="number" id="player-count" value="24" min="12" max="24" class="w-full p-2 border-2 border-black rounded">
+                            <label class="block font-bold mb-2">Numero Giocatori (12-30):</label>
+                            <input type="number" id="player-count" value="24" min="12" max="30" class="w-full p-2 border-2 border-black rounded">
                         </div>
                         <div>
                             <label class="block font-bold mb-2">Numero Team (2-4):</label>
@@ -314,15 +340,22 @@
             `;
             updateTeamConfigs();
             updateReturnEpisodes();
+            
+            const shuffledPool = [...FULL_CHARACTER_POOL].sort(() => 0.5 - Math.random());
             const playerCountInput = document.getElementById('player-count');
-            for(let i=0; i< parseInt(playerCountInput.value); i++) addCharacterRow(i);
-            playerCountInput.addEventListener('change', (e) => {
-                const charContainer = document.getElementById('characters-list');
-                const newCount = parseInt(e.target.value);
-                const currentCount = charContainer.children.length;
-                if (newCount > currentCount) for(let i = currentCount; i < newCount; i++) addCharacterRow(i);
-                else if (newCount < currentCount) for(let i = currentCount; i > newCount; i--) charContainer.lastElementChild.remove();
-            });
+            
+            const populateCharacters = () => {
+                const list = document.getElementById('characters-list');
+                list.innerHTML = '';
+                const count = parseInt(playerCountInput.value);
+                for(let i = 0; i < count; i++) {
+                    addCharacterRow(i, shuffledPool);
+                }
+            };
+            
+            populateCharacters();
+            playerCountInput.addEventListener('change', populateCharacters);
+
             document.getElementById('team-count').addEventListener('change', updateTeamConfigs);
             document.getElementById('return-count').addEventListener('change', updateReturnEpisodes);
         };
@@ -685,6 +718,7 @@
              const myPlayer = players.find(p => p.uid === globalState.currentUser.uid);
              const iAmInTiebreaker = tiebreaker.players.some(p => p.uid === myPlayer.uid);
              const myRollInfo = iAmInTiebreaker ? tiebreaker.players.find(p => p.uid === myPlayer.uid) : null;
+             const isHost = globalState.currentUser.uid === globalState.gameData.hostId;
 
              const getCharacter = (player) => settings.characters[player.characterIndex];
 
@@ -712,6 +746,8 @@
              } else if (!iAmInTiebreaker) {
                  playerControls = '<p class="font-bold">Stai assistendo a uno spareggio!</p>';
              }
+             
+             const hostControls = isHost ? `<button data-action="hostForcesDiceRoll" class="btn bg-orange-500 hover:bg-orange-600 mt-4">Forza Lancio Dadi</button>` : '';
 
 
              const screenHtml = `
@@ -722,6 +758,7 @@
                         ${playersInTiebreakerHtml}
                     </div>
                     ${playerControls}
+                    ${hostControls}
                 </div>
              `;
              appContainer.innerHTML = renderWithSidePanels(screenHtml);
@@ -783,6 +820,7 @@
                 case 'revealNextSafe': revealNextSafe(); break;
                 case 'nextEpisode': nextEpisode(); break;
                 case 'playerRollsDice': playerRollsDice(); break;
+                case 'hostForcesDiceRoll': hostForcesDiceRoll(); break;
             }
         };
 
@@ -820,10 +858,10 @@
             }
         };
 
-        const addCharacterRow = (index = null) => {
+        const addCharacterRow = (index = null, pool = FULL_CHARACTER_POOL) => {
             const list = document.getElementById('characters-list');
             const charIndex = index !== null ? index : list.children.length;
-            const defaultChar = DEFAULT_CHARACTERS[charIndex] || { name: `Personaggio ${charIndex + 1}`, img: '' };
+            const defaultChar = pool[charIndex] || { name: `Personaggio ${charIndex + 1}`, img: '' };
             
             const div = document.createElement('div');
             div.className = 'character-row grid grid-cols-1 md:grid-cols-6 gap-2 items-center';
@@ -1166,11 +1204,21 @@
         };
 
         const submitVote = async (votedPlayerUid) => {
-            const myPlayer = globalState.gameData.players.find(p => p.uid === globalState.currentUser.uid);
+            const { players, challengeResult, isMerged } = globalState.gameData;
+            const myPlayer = players.find(p => p.uid === globalState.currentUser.uid);
+
             if (myPlayer.status === 'eliminated') {
                 showModal("Non puoi votare, sei stato eliminato!");
                 return;
             }
+            
+            // --- BUG FIX ---
+            // Controlla se il giocatore è autorizzato a votare
+            if (!isMerged && myPlayer.teamId !== challengeResult.losingTeamId) {
+                showModal("Non puoi votare, il tuo team è salvo!");
+                return;
+            }
+            // --- FINE BUG FIX ---
 
             const myUid = globalState.currentUser.uid;
             const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
@@ -1381,6 +1429,23 @@
                     }
                 }
             }
+        };
+
+        const hostForcesDiceRoll = async () => {
+            const { tiebreaker } = globalState.gameData;
+            if (!tiebreaker) return;
+
+            const updatedTiePlayers = tiebreaker.players.map(pInfo => {
+                if (pInfo.roll === null) {
+                    return { ...pInfo, roll: Math.floor(Math.random() * 6) + 1 };
+                }
+                return pInfo;
+            });
+
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            await updateDoc(gameRef, { 'tiebreaker.players': updatedTiePlayers });
+
+            checkTiebreakerCompletion();
         };
         
         const nextEpisode = async () => {
