@@ -401,14 +401,25 @@
         };
         
         const renderGame = () => {
-            const { settings, players, teams, episode, status, challengeResult, votes, elimination } = globalState.gameData;
-            const myPlayer = players.find(p => p.uid === globalState.currentUser.uid);
+            const { status } = globalState.gameData;
+            const myPlayer = globalState.gameData.players.find(p => p.uid === globalState.currentUser.uid);
             
             if (myPlayer.status === 'eliminated') {
                 renderSpectatorView();
                 return;
             }
 
+            if (status === 'finale') {
+                renderFinale();
+                return;
+            }
+            
+            if (status === 'tiebreaker') {
+                renderTiebreaker();
+                return;
+            }
+
+            const { settings, players, teams, episode, challengeResult, votes, elimination } = globalState.gameData;
             const getCharacter = (player) => settings.characters[player.characterIndex];
 
             const teamsHtml = teams.map(team => {
@@ -445,20 +456,20 @@
                 statusMessage = `<h2 class="font-bangers text-5xl text-center my-4">Episodio ${episode}: Pronti per la sfida!</h2>`;
                 if(isHost) gameControls = `<button data-action="runChallenge" class="btn mt-6">Avvia Sfida</button>`;
             } else if (status === 'challenge_result') {
-                const winningTeam = teams.find(t => t.id === challengeResult.winningTeamId);
-                const losingTeams = teams.filter(t => challengeResult.losingTeamIds.includes(t.id));
+                const winningTeams = teams.filter(t => challengeResult.winningTeamIds.includes(t.id));
+                const losingTeam = teams.find(t => t.id === challengeResult.losingTeamId);
                 statusMessage = `
                     <h2 class="font-bangers text-5xl text-center my-4">Risultato Sfida!</h2>
-                    <p class="text-center text-2xl font-bold text-green-600">Team Vincente: ${winningTeam.name}</p>
-                    <p class="text-center text-xl font-bold text-red-600 mt-2">Team Perdenti: ${losingTeams.map(t=>t.name).join(', ')}</p>
+                    <p class="text-center text-2xl font-bold text-green-600">Team Vincenti: ${winningTeams.map(t=>t.name).join(', ')}</p>
+                    <p class="text-center text-xl font-bold text-red-600 mt-2">Team Perdente: ${losingTeam.name}</p>
                 `;
                 if(isHost) gameControls = `<button data-action="goToElimination" class="btn mt-6">Vai alla Cerimonia</button>`;
             } else if (status === 'elimination') {
-                const losingTeams = teams.filter(t => challengeResult.losingTeamIds.includes(t.id));
-                statusMessage = `<h2 class="font-bangers text-5xl text-center my-4 text-red-600">Cerimonia di Eliminazione per i Team: ${losingTeams.map(t=>t.name).join(', ')}!</h2>`;
+                const losingTeam = teams.find(t => challengeResult.losingTeamId === t.id);
+                statusMessage = `<h2 class="font-bangers text-5xl text-center my-4 text-red-600">Cerimonia di Eliminazione per il Team: ${losingTeam.name}!</h2>`;
                 
                 const myTeamId = myPlayer.teamId;
-                if(challengeResult.losingTeamIds.includes(myTeamId)){
+                if(challengeResult.losingTeamId === myTeamId){
                     const alreadyVoted = votes && votes[myPlayer.uid];
                     if(alreadyVoted) statusMessage += `<p class="text-center font-bold">Hai votato. In attesa degli altri...</p>`;
                     else statusMessage += renderVoteScreen();
@@ -498,6 +509,7 @@
                     <div class="text-center">
                         ${gameControls}
                     </div>
+                    ${renderEliminationRanking()}
                 </div>
             `;
             appContainer.innerHTML = renderWithSidePanels(screenHtml);
@@ -565,6 +577,88 @@
                 </div>
             `;
         };
+        
+        const renderEliminationRanking = () => {
+            const { eliminationOrder, players, settings } = globalState.gameData;
+            if (!eliminationOrder || eliminationOrder.length === 0) return '';
+
+            const rankingHtml = eliminationOrder.map((uid, index) => {
+                const player = players.find(p => p.uid === uid);
+                if (!player) return '';
+                const character = settings.characters[player.characterIndex];
+                return `
+                    <div class="flex items-center gap-3 bg-amber-200 p-2 rounded border-2 border-black">
+                        <span class="font-bangers text-2xl">${settings.playerCount - index}°</span>
+                        <img src="${character.img || 'https://placehold.co/40x40/e2e8f0/333?text=?'}" onerror="this.onerror=null;this.src='https://placehold.co/40x40/e2e8f0/333?text=Error';" class="w-10 h-10 object-cover rounded-full border-2 border-black">
+                        <span class="font-bold">${character.name}</span>
+                    </div>
+                `;
+            }).join('');
+
+            return `
+                <div class="panel mt-8">
+                    <h3 class="font-bangers text-3xl text-center mb-4">Classifica di Eliminazione</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                        ${rankingHtml}
+                    </div>
+                </div>
+            `;
+        };
+
+        const renderTiebreaker = () => {
+             const { settings, players, tiebreaker } = globalState.gameData;
+             const myPlayer = players.find(p => p.uid === globalState.currentUser.uid);
+             const iAmInTiebreaker = tiebreaker.players.some(p => p.uid === myPlayer.uid);
+             const myRollInfo = iAmInTiebreaker ? tiebreaker.players.find(p => p.uid === myPlayer.uid) : null;
+
+             const getCharacter = (player) => settings.characters[player.characterIndex];
+
+             const playersInTiebreakerHtml = tiebreaker.players.map(pInfo => {
+                 const player = players.find(p => p.uid === pInfo.uid);
+                 return `
+                    <div class="text-center">
+                        <img src="${getCharacter(player).img || 'https://placehold.co/80x80/e2e8f0/333?text=?'}" onerror="this.onerror=null;this.src='https://placehold.co/80x80/e2e8f0/333?text=Error';" class="w-24 h-24 object-cover mx-auto rounded-full border-4 border-black">
+                        <p class="font-bold text-xl mt-2">${getCharacter(player).name}</p>
+                        ${pInfo.roll ? `<p class="font-bangers text-5xl mt-2">${pInfo.roll} 🎲</p>` : '<p class="text-gray-500">In attesa...</p>'}
+                    </div>
+                 `;
+             }).join('');
+
+             let message = "C'è un pareggio! I seguenti concorrenti si sfideranno in uno spareggio con i dadi. Chi ottiene il punteggio più basso verrà eliminato.";
+             if (tiebreaker.lastResult === 'tie') {
+                 message = "Ancora un pareggio! Si lancia di nuovo tra i concorrenti con il punteggio più basso.";
+             }
+             
+             let playerControls = '<p class="font-bold">Attendi il tuo turno per lanciare...</p>';
+             if (iAmInTiebreaker && myRollInfo && myRollInfo.roll === null) {
+                 playerControls = '<button data-action="playerRollsDice" class="btn">Lancia il Dado!</button>';
+             } else if (iAmInTiebreaker && myRollInfo && myRollInfo.roll !== null) {
+                 playerControls = '<p class="font-bold">Hai lanciato! Attendi gli altri...</p>';
+             } else if (!iAmInTiebreaker) {
+                 playerControls = '<p class="font-bold">Stai assistendo a uno spareggio!</p>';
+             }
+
+
+             const screenHtml = `
+                <div class="panel text-center">
+                    <h2 class="font-bangers text-5xl text-red-600 mb-4">SPAREGGIO!</h2>
+                    <p class="text-xl mb-6">${message}</p>
+                    <div class="flex justify-center gap-8 my-8">
+                        ${playersInTiebreakerHtml}
+                    </div>
+                    ${playerControls}
+                </div>
+             `;
+             appContainer.innerHTML = renderWithSidePanels(screenHtml);
+             updateChatView();
+        };
+
+        const renderFinale = () => {
+            // Implementazione della schermata finale
+            const screenHtml = `<div class="panel text-center"><h2 class="font-bangers text-5xl">FINALE!</h2><p>Questa funzionalità è in costruzione.</p></div>`;
+            appContainer.innerHTML = renderWithSidePanels(screenHtml);
+            updateChatView();
+        };
 
         // --- LOGICA DI GIOCO E GESTIONE EVENTI ---
         
@@ -613,6 +707,7 @@
                 case 'startVoteReveal': startVoteReveal(); break;
                 case 'revealNextSafe': revealNextSafe(); break;
                 case 'nextEpisode': nextEpisode(); break;
+                case 'playerRollsDice': playerRollsDice(); break;
             }
         };
 
@@ -699,6 +794,7 @@
                     players: [hostPlayer],
                     settings,
                     episode: 1,
+                    eliminationOrder: [],
                     createdAt: new Date(),
                 };
             
@@ -742,8 +838,16 @@
                 if (globalState.unsubscribeGame) globalState.unsubscribeGame();
                 globalState.unsubscribeGame = onSnapshot(gameRef, (doc) => {
                     if (doc.exists()) {
+                        const oldStatus = globalState.gameData ? globalState.gameData.status : null;
                         globalState.gameData = doc.data();
-                        const newScreen = getScreenFromStatus(globalState.gameData.status);
+                        const newStatus = globalState.gameData.status;
+
+                        // Se è appena iniziato uno spareggio, l'host fa lanciare le CPU
+                        if (oldStatus !== 'tiebreaker' && newStatus === 'tiebreaker' && globalState.gameData.hostId === globalState.currentUser.uid) {
+                            rollCpuDiceInTiebreaker();
+                        }
+
+                        const newScreen = getScreenFromStatus(newStatus);
                         if(globalState.currentScreen !== newScreen){
                             globalState.currentScreen = newScreen;
                             render();
@@ -801,7 +905,7 @@
             switch(status){
                 case 'waiting': return 'lobby';
                 case 'character-selection': return 'characterSelection';
-                case 'challenge': case 'challenge_result': case 'elimination': case 'reveal': case 'reveal_in_progress': case 'revealed': return 'game';
+                case 'challenge': case 'challenge_result': case 'elimination': case 'reveal': case 'reveal_in_progress': case 'revealed': case 'tiebreaker': case 'finale': return 'game';
                 default: return 'mainMenu';
             }
         };
@@ -894,25 +998,43 @@
 
         const assignTeams = (players, teams) => {
             const shuffledPlayers = [...players].sort(() => 0.5 - Math.random());
+            const teamSlots = [];
+            const playerCount = players.length;
+            const teamCount = teams.length;
+
+            for (let i = 0; i < playerCount; i++) {
+                teamSlots.push(teams[i % teamCount].id);
+            }
+            
+            // Mescola gli slot dei team per un'assegnazione casuale
+            for (let i = teamSlots.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [teamSlots[i], teamSlots[j]] = [teamSlots[j], teamSlots[i]];
+            }
+
             shuffledPlayers.forEach((player, index) => {
-                player.teamId = teams[index % teams.length].id;
+                player.teamId = teamSlots[index];
                 player.status = 'active';
             });
         };
 
         const runChallenge = async () => {
             const { teams } = globalState.gameData;
-            const winningTeamId = teams[Math.floor(Math.random() * teams.length)].id;
-            const losingTeamIds = teams.filter(t => t.id !== winningTeamId).map(t => t.id);
+            const teamIds = teams.map(t => t.id);
+            const losingTeamIndex = Math.floor(Math.random() * teamIds.length);
+            const losingTeamId = teamIds[losingTeamIndex];
+            
+            const winningTeamIds = teamIds.filter(id => id !== losingTeamId);
+
             const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
-            await updateDoc(gameRef, { status: 'challenge_result', challengeResult: { winningTeamId, losingTeamIds } });
+            await updateDoc(gameRef, { status: 'challenge_result', challengeResult: { winningTeamIds, losingTeamId } });
         };
         
         const goToElimination = async () => {
             const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
             await updateDoc(gameRef, { status: 'elimination', votes: {} });
 
-            // SUBITO DOPO, controlla se i team perdenti sono solo di CPU
+            // SUBITO DOPO, controlla se il team perdente è solo di CPU
             const gameDoc = await getDoc(gameRef);
             if (!gameDoc.exists()) return;
             const gameData = gameDoc.data();
@@ -920,7 +1042,7 @@
             const { players, challengeResult } = gameData;
             const atRiskPlayers = players.filter(p => 
                 p.status === 'active' && 
-                challengeResult.losingTeamIds.includes(p.teamId)
+                p.teamId === challengeResult.losingTeamId
             );
 
             const hasHumanVoters = atRiskPlayers.some(p => !p.isCpu);
@@ -961,7 +1083,7 @@
             const gameData = gameDoc.data();
 
             const { players, challengeResult, votes } = gameData;
-            const voters = players.filter(p => p.status === 'active' && challengeResult.losingTeamIds.includes(p.teamId));
+            const voters = players.filter(p => p.status === 'active' && p.teamId === challengeResult.losingTeamId);
 
             const batch = writeBatch(db);
             let cpuVoted = false;
@@ -979,7 +1101,7 @@
 
             const finalDoc = await getDoc(gameRef);
             const finalData = finalDoc.data();
-            const finalVoters = finalData.players.filter(p => p.status === 'active' && finalData.challengeResult.losingTeamIds.includes(p.teamId));
+            const finalVoters = finalData.players.filter(p => p.status === 'active' && finalData.challengeResult.losingTeamId === p.teamId);
             if (finalVoters.length === Object.keys(finalData.votes).length) {
                 await updateDoc(gameRef, { status: 'reveal' });
             }
@@ -988,10 +1110,9 @@
         const startVoteReveal = async () => {
             const { players, votes, challengeResult } = globalState.gameData;
             
-            // Calcola i voti solo per i giocatori a rischio
-            const atRiskPlayers = players.filter(p => p.status === 'active' && challengeResult.losingTeamIds.includes(p.teamId));
+            const atRiskPlayers = players.filter(p => p.status === 'active' && p.teamId === challengeResult.losingTeamId);
             const voteCounts = {};
-            atRiskPlayers.forEach(p => voteCounts[p.uid] = 0); // Inizializza tutti a 0
+            atRiskPlayers.forEach(p => voteCounts[p.uid] = 0); 
 
             for(const voterUid in votes) {
                 const votedUid = votes[voterUid];
@@ -999,8 +1120,24 @@
                     voteCounts[votedUid]++;
                 }
             }
+            
+            // Controlla se c'è un pareggio per l'eliminazione
+            const maxVotes = Math.max(...Object.values(voteCounts));
+            const tiedPlayersUids = Object.keys(voteCounts).filter(uid => voteCounts[uid] === maxVotes);
 
-            // Ordina i giocatori a rischio per numero di voti (ascendente)
+            if (tiedPlayersUids.length > 1) {
+                // C'è un pareggio, avvia lo spareggio
+                const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+                await updateDoc(gameRef, {
+                    status: 'tiebreaker',
+                    tiebreaker: {
+                        players: tiedPlayersUids.map(uid => ({ uid, roll: null })),
+                        lastResult: null
+                    }
+                });
+                return;
+            }
+
             const sortedAtRiskUids = atRiskPlayers.map(p => p.uid).sort((a, b) => voteCounts[a] - voteCounts[b]);
 
             const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
@@ -1013,7 +1150,6 @@
                     eliminatedUid: null
                 }
             });
-            // La prima rivelazione avviene subito dopo
             revealNextSafe();
         };
 
@@ -1026,12 +1162,14 @@
                 // Rimane solo l'eliminato
                 const eliminatedUid = atRiskUids.find(uid => !safePlayers.includes(uid));
                 const updatedPlayers = players.map(p => p.uid === eliminatedUid ? { ...p, status: 'eliminated' } : p);
+                const eliminationOrder = [...(globalState.gameData.eliminationOrder || []), eliminatedUid];
                 
                 const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
                 await updateDoc(gameRef, {
                     status: 'revealed',
                     players: updatedPlayers,
-                    'elimination.eliminatedUid': eliminatedUid
+                    'elimination.eliminatedUid': eliminatedUid,
+                    eliminationOrder: eliminationOrder
                 });
             } else {
                 // Rivela il prossimo giocatore salvo
@@ -1044,16 +1182,107 @@
                 });
             }
         };
+
+        const playerRollsDice = async () => {
+            const { tiebreaker } = globalState.gameData;
+            const myUid = globalState.currentUser.uid;
+            
+            const myTieInfo = tiebreaker.players.find(p => p.uid === myUid);
+            if (!myTieInfo || myTieInfo.roll !== null) return; // Già tirato o non in spareggio
+
+            const newRoll = Math.floor(Math.random() * 6) + 1;
+            const updatedTiePlayers = tiebreaker.players.map(p => p.uid === myUid ? { ...p, roll: newRoll } : p);
+
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            await updateDoc(gameRef, { 'tiebreaker.players': updatedTiePlayers });
+
+            checkTiebreakerCompletion();
+        };
+
+        const rollCpuDiceInTiebreaker = async () => {
+            const { players, tiebreaker } = globalState.gameData;
+            if (!tiebreaker) return;
+
+            const batch = writeBatch(db);
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            let cpusRolled = false;
+
+            const updatedTiePlayers = tiebreaker.players.map(pInfo => {
+                const player = players.find(p => p.uid === pInfo.uid);
+                if (player.isCpu && pInfo.roll === null) {
+                    cpusRolled = true;
+                    return { ...pInfo, roll: Math.floor(Math.random() * 6) + 1 };
+                }
+                return pInfo;
+            });
+
+            if (cpusRolled) {
+                batch.update(gameRef, { 'tiebreaker.players': updatedTiePlayers });
+                await batch.commit();
+                checkTiebreakerCompletion();
+            }
+        };
+
+        const checkTiebreakerCompletion = async () => {
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            const gameDoc = await getDoc(gameRef);
+            if (!gameDoc.exists()) return;
+            const { players, tiebreaker } = gameDoc.data();
+
+            if (tiebreaker.players.every(p => p.roll !== null)) {
+                // Tutti hanno tirato, determina il risultato
+                const minRoll = Math.min(...tiebreaker.players.map(p => p.roll));
+                const losers = tiebreaker.players.filter(p => p.roll === minRoll);
+
+                if (losers.length === 1) {
+                    const eliminatedUid = losers[0].uid;
+                    const updatedPlayers = players.map(p => p.uid === eliminatedUid ? { ...p, status: 'eliminated' } : p);
+                    const eliminationOrder = [...(globalState.gameData.eliminationOrder || []), eliminatedUid];
+
+                    await updateDoc(gameRef, {
+                        status: 'revealed',
+                        players: updatedPlayers,
+                        elimination: { eliminatedUid: eliminatedUid, voteCounts: { [eliminatedUid]: 'Spareggio' } },
+                        tiebreaker: null,
+                        eliminationOrder: eliminationOrder
+                    });
+                } else {
+                    await updateDoc(gameRef, {
+                        'tiebreaker.players': losers.map(p => ({ uid: p.uid, roll: null })),
+                        'tiebreaker.lastResult': 'tie'
+                    });
+                     if (globalState.gameData.hostId === globalState.currentUser.uid) {
+                        setTimeout(rollCpuDiceInTiebreaker, 1000);
+                    }
+                }
+            }
+        };
         
         const nextEpisode = async () => {
+            const activePlayers = globalState.gameData.players.filter(p => p.status === 'active');
             const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
-            await updateDoc(gameRef, { 
-                status: 'challenge', 
-                episode: globalState.gameData.episode + 1, 
-                challengeResult: null, 
-                elimination: null, 
-                votes: {} 
-            });
+
+            if (activePlayers.length <= 2) {
+                // Avvia la finale
+                await updateDoc(gameRef, {
+                    status: 'finale',
+                    finale: {
+                        players: activePlayers.map(p => ({ uid: p.uid, score: 0, choice: null })),
+                        round: 1,
+                        lastResult: null
+                    }
+                });
+            } else {
+                // Prossimo episodio normale
+                await updateDoc(gameRef, { 
+                    status: 'challenge', 
+                    episode: globalState.gameData.episode + 1, 
+                    challengeResult: null, 
+                    elimination: null, 
+                    tiebreaker: null,
+                    votes: {} 
+                });
+            }
         };
 
         // --- INIZIALIZZAZIONE ---
