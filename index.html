@@ -100,6 +100,7 @@
         let globalState = {
             currentUser: null,
             currentScreen: 'loading',
+            nickname: '',
             gameId: null,
             gameData: null,
             chatMessages: [],
@@ -147,14 +148,43 @@
             }
         };
         
-        const renderWithChat = (screenHtml) => {
+        const renderWithSidePanels = (screenHtml) => {
             return `
                 <div class="w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6 h-[85vh]">
                     <div id="screen-container" class="lg:col-span-2 h-full overflow-y-auto p-2">
                         ${screenHtml}
                     </div>
-                    <div class="h-full">
-                        ${renderChat()}
+                    <div class="h-full flex flex-col gap-4">
+                        <div class="flex-shrink-0">
+                           ${renderPlayerInfoPanel()}
+                        </div>
+                        <div class="flex-grow min-h-0">
+                           ${renderChat()}
+                        </div>
+                    </div>
+                </div>
+            `;
+        };
+        
+        const renderPlayerInfoPanel = () => {
+            if (!globalState.gameData) return '';
+
+            const myPlayer = globalState.gameData.players.find(p => p.uid === globalState.currentUser.uid);
+            if (!myPlayer || myPlayer.characterIndex === null) return '';
+
+            const character = globalState.gameData.settings.characters[myPlayer.characterIndex];
+            const statusText = myPlayer.status === 'eliminated' ? 'Eliminato' : 'In Gara';
+            const statusColor = myPlayer.status === 'eliminated' ? 'text-red-600' : 'text-green-600';
+            
+            return `
+                <div class="panel p-3">
+                    <h3 class="font-bangers text-2xl text-center mb-2">Il Tuo Personaggio</h3>
+                    <div class="flex items-center gap-4">
+                        <img src="${character.img || 'https://placehold.co/80x80/e2e8f0/333?text=?'}" onerror="this.onerror=null;this.src='https://placehold.co/80x80/e2e8f0/333?text=Error';" class="w-20 h-20 object-cover rounded-full border-4 border-black">
+                        <div>
+                            <p class="font-bold text-xl">${character.name}</p>
+                            <p class="font-bold ${statusColor}">${statusText}</p>
+                        </div>
                     </div>
                 </div>
             `;
@@ -202,7 +232,11 @@
             appContainer.innerHTML = `
                 <div class="text-center w-full max-w-lg">
                     <h1 class="font-bangers text-8xl text-yellow-400" style="text-shadow: 4px 4px 0 #000, -4px -4px 0 #000, 4px -4px 0 #000, -4px 4px 0 #000, 4px 0 0 #000, -4px 0 0 #000, 0 4px 0 #000, 0 -4px 0 #000;">A Tutto Reality</h1>
-                    <h2 class="font-bangers text-6xl text-white mb-12" style="text-shadow: 3px 3px 0 #000;">La Sfida Online</h2>
+                    <h2 class="font-bangers text-6xl text-white mb-8" style="text-shadow: 3px 3px 0 #000;">La Sfida Online</h2>
+                    <div class="panel mb-8">
+                         <label for="nickname-input" class="block font-bold mb-2 text-xl">Inserisci il tuo Nickname:</label>
+                         <input type="text" id="nickname-input" class="w-full p-3 text-center text-xl font-bold border-4 border-black rounded" maxlength="15" value="${globalState.nickname}">
+                    </div>
                     <div class="flex flex-col space-y-6">
                         <button data-action="goToCreateGame" class="btn">Crea Partita</button>
                         <button data-action="goToJoinGame" class="btn">Unisciti con Codice</button>
@@ -322,7 +356,7 @@
                     </div>
                 </div>
             `;
-            appContainer.innerHTML = renderWithChat(screenHtml);
+            appContainer.innerHTML = renderWithSidePanels(screenHtml);
             updateChatView();
         };
 
@@ -362,7 +396,7 @@
                     <p class="text-center mt-6 font-bold">In attesa che tutti i giocatori scelgano...</p>
                 </div>
             `;
-            appContainer.innerHTML = renderWithChat(screenHtml);
+            appContainer.innerHTML = renderWithSidePanels(screenHtml);
             updateChatView();
         };
         
@@ -450,7 +484,8 @@
             } else if (status === 'revealed') {
                 const eliminatedPlayer = players.find(p => p.uid === elimination.eliminatedUid);
                 const eliminatedChar = getCharacter(eliminatedPlayer);
-                 statusMessage = `<h2 class="font-bangers text-5xl text-center my-4 text-red-700">${eliminatedChar.name} è stato eliminato!</h2>`;
+                const votesForEliminated = elimination.voteCounts[elimination.eliminatedUid] || 0;
+                 statusMessage = `<h2 class="font-bangers text-5xl text-center my-4 text-red-700">${eliminatedChar.name} è stato eliminato con ${votesForEliminated} voti!</h2>`;
                  if(isHost) gameControls = `<button data-action="nextEpisode" class="btn mt-6">Prossimo Episodio</button>`;
             }
 
@@ -465,7 +500,7 @@
                     </div>
                 </div>
             `;
-            appContainer.innerHTML = renderWithChat(screenHtml);
+            appContainer.innerHTML = renderWithSidePanels(screenHtml);
             updateChatView();
         };
         
@@ -501,7 +536,7 @@
                 `;
             }
 
-            appContainer.innerHTML = renderWithChat(spectatorHtml);
+            appContainer.innerHTML = renderWithSidePanels(spectatorHtml);
             updateChatView();
         };
 
@@ -532,20 +567,43 @@
         };
 
         // --- LOGICA DI GIOCO E GESTIONE EVENTI ---
+        
+        const preGameAction = (action, id = null) => {
+            const nicknameInput = document.getElementById('nickname-input');
+            const nickname = nicknameInput ? nicknameInput.value.trim() : globalState.nickname;
+
+            if (!nickname) {
+                showModal("Per favore, inserisci un nickname per continuare.");
+                return;
+            }
+            globalState.nickname = nickname;
+
+            switch (action) {
+                case 'goToCreateGame': globalState.currentScreen = 'createGame'; render(); break;
+                case 'goToJoinGame': globalState.currentScreen = 'joinGame'; render(); break;
+                case 'goToFindGame': globalState.currentScreen = 'findGame'; render(); break;
+                case 'joinWithId': joinGame(id); break;
+            }
+        };
+
         const handleAppClick = (e) => {
             const target = e.target.closest('[data-action]');
             if (!target) return;
 
             const { action, id, index, uid } = target.dataset;
 
+            // Gestione azioni pre-partita
+            const preGameActions = ['goToCreateGame', 'goToJoinGame', 'goToFindGame', 'joinWithId'];
+            if (preGameActions.includes(action)) {
+                preGameAction(action, id);
+                return;
+            }
+
+            // Gestione azioni in-partita
             switch (action) {
                 case 'goToMainMenu': leaveGameCleanup(); break;
-                case 'goToCreateGame': globalState.currentScreen = 'createGame'; render(); break;
-                case 'goToJoinGame': globalState.currentScreen = 'joinGame'; render(); break;
-                case 'goToFindGame': globalState.currentScreen = 'findGame'; render(); break;
                 case 'addCharacter': addCharacterRow(); break;
                 case 'removeCharacter': target.closest('.character-row').remove(); break;
-                case 'joinWithId': joinGame(id); break;
                 case 'startGame': startGame(); break;
                 case 'leaveGame': leaveGame(); break;
                 case 'selectCharacter': if (!target.classList.contains('selected-by-other')) selectCharacter(index); break;
@@ -629,7 +687,7 @@
                 const newGameId = generateId();
                 const hostPlayer = {
                     uid: globalState.currentUser.uid,
-                    name: `Anonimo ${Math.floor(Math.random() * 1000)}`,
+                    name: globalState.nickname,
                     isHost: true,
                     characterIndex: null,
                 };
@@ -656,6 +714,8 @@
 
         const joinGame = async (gameId) => {
             if (!gameId) { showModal("Codice non valido."); return; }
+            if (!globalState.nickname) { showModal("Per favore, torna al menu e inserisci un nickname."); return; }
+
             const gameRef = doc(db, `artifacts/${appId}/public/data/games`, gameId);
             try {
                 const gameDoc = await getDoc(gameRef);
@@ -670,7 +730,7 @@
 
                     const newPlayer = {
                         uid: myUid,
-                        name: `Anonimo ${Math.floor(Math.random() * 1000)}`,
+                        name: globalState.nickname,
                         isHost: false,
                         characterIndex: null,
                     };
@@ -852,24 +912,24 @@
             const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
             await updateDoc(gameRef, { status: 'elimination', votes: {} });
 
-            // SUBITO DOPO, controlla se il team perdente è solo di CPU
+            // SUBITO DOPO, controlla se i team perdenti sono solo di CPU
             const gameDoc = await getDoc(gameRef);
             if (!gameDoc.exists()) return;
             const gameData = gameDoc.data();
             
             const { players, challengeResult } = gameData;
-            const losingTeamPlayers = players.filter(p => 
+            const atRiskPlayers = players.filter(p => 
                 p.status === 'active' && 
                 challengeResult.losingTeamIds.includes(p.teamId)
             );
 
-            const hasHumanVoters = losingTeamPlayers.some(p => !p.isCpu);
+            const hasHumanVoters = atRiskPlayers.some(p => !p.isCpu);
 
-            if (!hasHumanVoters && losingTeamPlayers.length > 0) {
+            if (!hasHumanVoters && atRiskPlayers.length > 0) {
                 // Se non ci sono giocatori umani, simula il voto delle CPU immediatamente
                 const newVotes = {};
-                losingTeamPlayers.forEach(voter => {
-                    const potentialTargets = losingTeamPlayers.filter(p => p.uid !== voter.uid);
+                atRiskPlayers.forEach(voter => {
+                    const potentialTargets = atRiskPlayers.filter(p => p.uid !== voter.uid);
                     if (potentialTargets.length > 0) {
                         const target = potentialTargets[Math.floor(Math.random() * potentialTargets.length)];
                         newVotes[voter.uid] = target.uid;
