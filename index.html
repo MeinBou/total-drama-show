@@ -441,7 +441,7 @@
                 const votesForSafe = elimination.voteCounts[lastSafePlayerUid] || 0;
                 statusMessage = `<h2 class="font-bangers text-4xl text-center my-4">${lastSafeCharacter.name} è salvo con ${votesForSafe} voti!</h2>`;
 
-                if(elimination.atRisk.length === 2) {
+                if(elimination.atRisk.length - elimination.safePlayers.length === 2) {
                     statusMessage += `<p class="font-bangers text-3xl text-center text-red-600 my-4">Siamo arrivati agli ultimi due...</p>`;
                 }
 
@@ -851,6 +851,34 @@
         const goToElimination = async () => {
             const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
             await updateDoc(gameRef, { status: 'elimination', votes: {} });
+
+            // SUBITO DOPO, controlla se il team perdente è solo di CPU
+            const gameDoc = await getDoc(gameRef);
+            if (!gameDoc.exists()) return;
+            const gameData = gameDoc.data();
+            
+            const { players, challengeResult } = gameData;
+            const losingTeamPlayers = players.filter(p => 
+                p.status === 'active' && 
+                challengeResult.losingTeamIds.includes(p.teamId)
+            );
+
+            const hasHumanVoters = losingTeamPlayers.some(p => !p.isCpu);
+
+            if (!hasHumanVoters && losingTeamPlayers.length > 0) {
+                // Se non ci sono giocatori umani, simula il voto delle CPU immediatamente
+                const newVotes = {};
+                losingTeamPlayers.forEach(voter => {
+                    const potentialTargets = losingTeamPlayers.filter(p => p.uid !== voter.uid);
+                    if (potentialTargets.length > 0) {
+                        const target = potentialTargets[Math.floor(Math.random() * potentialTargets.length)];
+                        newVotes[voter.uid] = target.uid;
+                    }
+                });
+                
+                // Aggiorna i voti e passa subito alla fase di rivelazione
+                await updateDoc(gameRef, { votes: newVotes, status: 'reveal' });
+            }
         };
 
         const submitVote = async (votedPlayerUid) => {
