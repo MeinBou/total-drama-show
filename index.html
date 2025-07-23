@@ -417,6 +417,7 @@
                     <div class="text-center">
                         ${isHost ? `<button data-action="startGame" class="btn">Avvia Partita</button>` : '<p class="font-bold">Solo l\'host può avviare la partita.</p>'}
                         <button data-action="leaveGame" class="btn bg-red-500 hover:bg-red-600 mt-4">Esci</button>
+                        ${isHost ? `<button data-action="testFinale" class="btn bg-yellow-500 hover:bg-yellow-600 mt-4">Test Finale</button>` : ''}
                     </div>
                 </div>
             `;
@@ -811,6 +812,7 @@
                 case 'addCharacter': addCharacterRow(); break;
                 case 'removeCharacter': target.closest('.character-row').remove(); break;
                 case 'startGame': startGame(); break;
+                case 'testFinale': testFinale(); break;
                 case 'leaveGame': leaveGame(); break;
                 case 'selectCharacter': if (!target.classList.contains('selected-by-other')) selectCharacter(index); break;
                 case 'runChallenge': runChallenge(); break;
@@ -1066,6 +1068,39 @@
             const allPlayers = [...players, ...newCpuPlayers];
 
             await updateDoc(gameRef, { status: 'character-selection', players: allPlayers });
+        };
+
+        const testFinale = async () => {
+            if (!globalState.gameId) return;
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            
+            const { players, settings } = globalState.gameData;
+            
+            // Prendi i primi due giocatori (host e un altro, o due CPU)
+            const finalists = players.slice(0, 2);
+            if (finalists.length < 2) {
+                showModal("Servono almeno 2 giocatori per testare la finale.");
+                return;
+            }
+
+            // Imposta tutti gli altri come eliminati per pulizia
+            const updatedPlayers = players.map(p => {
+                if (finalists.some(f => f.uid === p.uid)) {
+                    return { ...p, status: 'active', characterIndex: p.characterIndex !== null ? p.characterIndex : 0 }; // Assegna un personaggio di default se non scelto
+                }
+                return { ...p, status: 'eliminated' };
+            });
+
+            await updateDoc(gameRef, {
+                status: 'finale',
+                players: updatedPlayers,
+                isMerged: true, // La finale è sempre post-merge
+                finale: {
+                    players: finalists.map(p => ({ uid: p.uid, score: 0, choice: null })),
+                    round: 1,
+                    lastResult: null
+                }
+            });
         };
 
         const selectCharacter = async (charIndexStr) => {
