@@ -475,6 +475,7 @@
             const { status } = globalState.gameData;
             if (status === 'finale') { renderFinale(); return; }
             if (status === 'tiebreaker') { renderTiebreaker(); return; }
+            if (status === 'game_over') { renderGameOver(); return; }
 
             const { settings, players, teams, episode, challengeResult, votes, elimination, isMerged, immunePlayerUid } = globalState.gameData;
             const getCharacter = (player) => settings.characters[player.characterIndex];
