@@ -79,8 +79,8 @@
     <script type="module">
         // Importa le funzioni necessarie da Firebase
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, getDocs, query, where, updateDoc, writeBatch, addDoc, serverTimestamp, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, getDocs, query, where, updateDoc, writeBatch, addDoc, serverTimestamp, orderBy, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- CONFIGURAZIONE FIREBASE ---
         const firebaseConfig = {
@@ -92,12 +92,15 @@
             appId: "1:668431070513:web:bd2a955d6ebfdc810d6c10",
             measurementId: "G-QE0Z4XWTBG"
         };
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'a-tutto-reality-online';
+        
+        // Questo ID identifica l'applicazione nel database. Puoi lasciarlo così.
+        const appId = 'a-tutto-reality-online';
 
         // Inizializza Firebase
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+
 
         // --- DATI PREDEFINITI ---
         const FULL_CHARACTER_POOL = [
@@ -112,7 +115,7 @@
             { name: "Lapis", img: "https://i.pinimg.com/originals/8c/89/b1/8c89b1c86c32046422fdf07cb3f84921.gif" },
             { name: "Gwen", img: "https://media.tenor.com/83wH-eEZQA4AAAAM/gwen-total-drama.gif" },
             { name: "Velma", img: "https://i.pinimg.com/originals/d6/88/2c/d6882cd3f134979be924254b186cb01b.gif" },
-            { name: "Gommarosa", img: "https://i.pinimg.com/originals/f0/a2/63/f0/a263c8848f14ba56651023d1afff91.gif" },
+            { name: "Gommarosa", img: "https://i.pinimg.com/originals/f0/a2/63/f0a263c8848f14ba56651023d1afff91.gif" },
             { name: "Gumball", img: "https://i.pinimg.com/originals/2a/51/64/2a5164c11b0468154dbcef44858e0769.gif" },
             { name: "Stewie", img: "https://i.pinimg.com/originals/71/96/0f/71960fbdf396f732051c2e88a6c39443.gif" },
             { name: "Patrick", img: "https://i.pinimg.com/originals/f9/e7/a0/f9e7a02065d880479c13d61b5d60f4f2.gif" },
@@ -473,9 +476,9 @@
             }
             
             const { status } = globalState.gameData;
+            if (status === 'game_over') { renderGameOver(); return; }
             if (status === 'finale') { renderFinale(); return; }
             if (status === 'tiebreaker') { renderTiebreaker(); return; }
-            if (status === 'game_over') { renderGameOver(); return; }
 
             const { settings, players, teams, episode, challengeResult, votes, elimination, isMerged, immunePlayerUid } = globalState.gameData;
             const getCharacter = (player) => settings.characters[player.characterIndex];
@@ -504,7 +507,7 @@
                     </div>
                 `;
             } else {
-                 mainContentHtml = teams.map(team => {
+                    mainContentHtml = teams.map(team => {
                     const membersHtml = players
                         .filter(p => p.teamId === team.id && p.status === 'active')
                         .map(p => {
@@ -553,8 +556,8 @@
                 if(alreadyVoted) statusMessage += `<p class="text-center font-bold">Hai votato. In attesa degli altri...</p>`;
                 else statusMessage += renderVoteScreen();
             } else if (status === 'reveal') {
-                 statusMessage = `<h2 class="font-bangers text-5xl text-center my-4">Il Momento della Verità...</h2><p class="text-center">L'host sta per rivelare i voti...</p>`;
-                 if(isHost) gameControls = `<button data-action="startVoteReveal" class="btn mt-6">Inizia a Rivelare i Voti</button>`;
+                    statusMessage = `<h2 class="font-bangers text-5xl text-center my-4">Il Momento della Verità...</h2><p class="text-center">L'host sta per rivelare i voti...</p>`;
+                    if(isHost) gameControls = `<button data-action="startVoteReveal" class="btn mt-6">Inizia a Rivelare i Voti</button>`;
             } else if (status === 'reveal_in_progress') {
                 const lastSafePlayerUid = elimination.safePlayers[elimination.safePlayers.length - 1];
                 const lastSafePlayer = players.find(p => p.uid === lastSafePlayerUid);
@@ -572,8 +575,8 @@
                 const eliminatedPlayer = players.find(p => p.uid === elimination.eliminatedUid);
                 const eliminatedChar = getCharacter(eliminatedPlayer);
                 const votesForEliminated = elimination.voteCounts[elimination.eliminatedUid] === 'Spareggio' ? 'allo spareggio' : `con ${elimination.voteCounts[elimination.eliminatedUid]} voti`;
-                 statusMessage = `<h2 class="font-bangers text-5xl text-center my-4 text-red-700">${eliminatedChar.name} è stato eliminato ${votesForEliminated}!</h2>`;
-                 if(isHost) gameControls = `<button data-action="nextEpisode" class="btn mt-6">Prossimo Episodio</button>`;
+                    statusMessage = `<h2 class="font-bangers text-5xl text-center my-4 text-red-700">${eliminatedChar.name} è stato eliminato ${votesForEliminated}!</h2>`;
+                    if(isHost) gameControls = `<button data-action="nextEpisode" class="btn mt-6">Prossimo Episodio</button>`;
             }
 
             const screenHtml = `
@@ -606,7 +609,7 @@
 
             if (isHost) {
                  if (status === 'challenge') {
-                    hostControls = `<button data-action="runChallenge" class="btn mt-6">Avvia Sfida</button>`;
+                     hostControls = `<button data-action="runChallenge" class="btn mt-6">Avvia Sfida</button>`;
                 } else if (status === 'challenge_result') {
                      hostControls = `<button data-action="goToElimination" class="btn mt-6">Vai alla Cerimonia</button>`;
                 } else if (status === 'reveal') {
@@ -727,11 +730,11 @@
              const playersInTiebreakerHtml = tiebreaker.players.map(pInfo => {
                  const player = players.find(p => p.uid === pInfo.uid);
                  return `
-                    <div class="text-center">
-                        <img src="${getCharacter(player).img || 'https://placehold.co/80x80/e2e8f0/333?text=?'}" onerror="this.onerror=null;this.src='https://placehold.co/80x80/e2e8f0/333?text=Error';" class="w-24 h-24 object-cover mx-auto rounded-full border-4 border-black">
-                        <p class="font-bold text-xl mt-2">${getCharacter(player).name}</p>
-                        ${pInfo.roll ? `<p class="font-bangers text-5xl mt-2">${pInfo.roll} 🎲</p>` : '<p class="text-gray-500">In attesa...</p>'}
-                    </div>
+                     <div class="text-center">
+                         <img src="${getCharacter(player).img || 'https://placehold.co/80x80/e2e8f0/333?text=?'}" onerror="this.onerror=null;this.src='https://placehold.co/80x80/e2e8f0/333?text=Error';" class="w-24 h-24 object-cover mx-auto rounded-full border-4 border-black">
+                         <p class="font-bold text-xl mt-2">${getCharacter(player).name}</p>
+                         ${pInfo.roll ? `<p class="font-bangers text-5xl mt-2">${pInfo.roll} 🎲</p>` : '<p class="text-gray-500">In attesa...</p>'}
+                     </div>
                  `;
              }).join('');
 
@@ -753,23 +756,124 @@
 
 
              const screenHtml = `
-                <div class="panel text-center">
-                    <h2 class="font-bangers text-5xl text-red-600 mb-4">SPAREGGIO!</h2>
-                    <p class="text-xl mb-6">${message}</p>
-                    <div class="flex justify-center gap-8 my-8">
-                        ${playersInTiebreakerHtml}
-                    </div>
-                    ${playerControls}
-                    ${hostControls}
-                </div>
+                 <div class="panel text-center">
+                     <h2 class="font-bangers text-5xl text-red-600 mb-4">SPAREGGIO!</h2>
+                     <p class="text-xl mb-6">${message}</p>
+                     <div class="flex justify-center gap-8 my-8">
+                         ${playersInTiebreakerHtml}
+                     </div>
+                     ${playerControls}
+                     ${hostControls}
+                 </div>
              `;
              appContainer.innerHTML = renderWithSidePanels(screenHtml);
              updateChatView();
         };
 
         const renderFinale = () => {
-            // Implementazione della schermata finale
-            const screenHtml = `<div class="panel text-center"><h2 class="font-bangers text-5xl">FINALE!</h2><p>Questa funzionalità è in costruzione.</p></div>`;
+            const { settings, players, finale } = globalState.gameData;
+            const myPlayer = players.find(p => p.uid === globalState.currentUser.uid);
+            const isHost = globalState.currentUser.uid === globalState.gameData.hostId;
+            const getCharacter = (uid) => {
+                const player = players.find(p => p.uid === uid);
+                return settings.characters[player.characterIndex];
+            };
+
+            const finalist1 = finale.players[0];
+            const finalist2 = finale.players[1];
+            const char1 = getCharacter(finalist1.uid);
+            const char2 = getCharacter(finalist2.uid);
+
+            const currentRound = finale.rounds[finale.rounds.length - 1];
+            const myUid = myPlayer.uid;
+            const iAmInFinale = myUid === finalist1.uid || myUid === finalist2.uid;
+            const canIRoll = iAmInFinale && (
+                (myUid === finalist1.uid && currentRound.roll1 === null) ||
+                (myUid === finalist2.uid && currentRound.roll2 === null)
+            );
+
+            let playerControls = '';
+            if (canIRoll) {
+                playerControls = `<button data-action="playerRollsDiceFinale" class="btn">Lancia il Dado!</button>`;
+            } else if (iAmInFinale) {
+                playerControls = `<p class="font-bold">Hai lanciato! Attendi il tuo avversario...</p>`;
+            } else {
+                playerControls = `<p class="font-bold">Stai assistendo alla finale!</p>`;
+            }
+            
+            const hostControls = isHost ? `<button data-action="hostForcesFinaleRoll" class="btn bg-orange-500 hover:bg-orange-600 mt-4">Forza Lancio</button>` : '';
+
+            const roundsHistoryHtml = finale.rounds.map((round, index) => {
+                if (round.winner === null && round.roll1 === null) return ''; // Non mostrare il round corrente se non è iniziato
+                let resultText = `Round ${index + 1}: In corso...`;
+                if (round.winner && round.winner !== 'tie') {
+                    const winnerName = getCharacter(round.winner).name;
+                    resultText = `Round ${index + 1}: <span class="font-bold text-green-600">${winnerName}</span> vince (${round.roll1} a ${round.roll2})`;
+                } else if (round.roll1 !== null && round.roll2 !== null && round.winner === 'tie') {
+                     resultText = `Round ${index + 1}: Pareggio! (${round.roll1} a ${round.roll2}) Si rilancia!`;
+                }
+                return `<li class="bg-amber-200 p-2 rounded">${resultText}</li>`;
+            }).join('');
+
+            const screenHtml = `
+                <div class="panel text-center">
+                    <h2 class="font-bangers text-6xl text-yellow-400" style="text-shadow: 2px 2px 0 #000;">GRAN FINALE!</h2>
+                    <p class="text-xl mb-6">Il primo che vince 3 round è il campione di A Tutto Reality!</p>
+                    
+                    <div class="flex justify-around items-start my-8">
+                        <!-- Finalista 1 -->
+                        <div class="flex flex-col items-center">
+                            <img src="${char1.img}" class="w-32 h-32 object-cover rounded-full border-4 border-black">
+                            <p class="font-bold text-2xl mt-2">${char1.name}</p>
+                            <p class="font-bangers text-5xl">${finalist1.score}</p>
+                            ${currentRound.roll1 ? `<p class="font-bangers text-4xl text-blue-600">🎲 ${currentRound.roll1}</p>` : ''}
+                        </div>
+                        
+                        <div class="font-bangers text-7xl pt-16">VS</div>
+                        
+                        <!-- Finalista 2 -->
+                        <div class="flex flex-col items-center">
+                            <img src="${char2.img}" class="w-32 h-32 object-cover rounded-full border-4 border-black">
+                            <p class="font-bold text-2xl mt-2">${char2.name}</p>
+                            <p class="font-bangers text-5xl">${finalist2.score}</p>
+                            ${currentRound.roll2 ? `<p class="font-bangers text-4xl text-red-600">🎲 ${currentRound.roll2}</p>` : ''}
+                        </div>
+                    </div>
+
+                    <div class="mt-8">
+                        ${playerControls}
+                        ${hostControls}
+                    </div>
+                    
+                    <div class="mt-8 max-w-md mx-auto">
+                        <h3 class="font-bangers text-3xl mb-2">Storico Round</h3>
+                        <ul class="space-y-2">${roundsHistoryHtml}</ul>
+                    </div>
+                </div>
+            `;
+            appContainer.innerHTML = renderWithSidePanels(screenHtml);
+            updateChatView();
+        };
+        
+        const renderGameOver = () => {
+            const { settings, players, winnerUid } = globalState.gameData;
+            const winnerPlayer = players.find(p => p.uid === winnerUid);
+            const winnerCharacter = settings.characters[winnerPlayer.characterIndex];
+
+            const screenHtml = `
+                <div class="panel text-center fade-in">
+                    <h2 class="font-bangers text-5xl text-amber-500">ABBIAMO UN VINCITORE!</h2>
+                    <img src="${winnerCharacter.img}" class="w-48 h-48 object-cover rounded-full border-8 border-yellow-400 mx-auto my-6 shadow-lg">
+                    <h3 class="font-bangers text-6xl">${winnerCharacter.name}</h3>
+                    <p class="text-2xl font-bold">è il campione di A Tutto Reality: La Sfida Online!</p>
+                    
+                    <div class="mt-8">
+                        ${renderEliminationRanking()}
+                    </div>
+
+                    <button data-action="goToMainMenu" class="btn bg-blue-500 hover:bg-blue-600 mt-8">Torna al Menu Principale</button>
+                </div>
+            `;
             appContainer.innerHTML = renderWithSidePanels(screenHtml);
             updateChatView();
         };
@@ -824,6 +928,8 @@
                 case 'nextEpisode': nextEpisode(); break;
                 case 'playerRollsDice': playerRollsDice(); break;
                 case 'hostForcesDiceRoll': hostForcesDiceRoll(); break;
+                case 'playerRollsDiceFinale': playerRollsDiceFinale(); break;
+                case 'hostForcesFinaleRoll': hostForcesFinaleRoll(); break;
             }
         };
 
@@ -884,6 +990,9 @@
                     const urlInput = row.querySelector('.character-img-url');
                     const name = nameInput.value.trim() || `Personaggio ${index + 1}`;
                     const img = urlInput.value.trim();
+                    if (!img) {
+                        throw new Error(`L'immagine per il personaggio "${name}" è obbligatoria.`);
+                    }
                     return { name, img };
                 });
 
@@ -923,7 +1032,7 @@
 
             } catch (error) {
                 console.error("Errore dettagliato nella creazione della partita:", error);
-                showModal("Impossibile creare la partita. Controlla la connessione e riprova.");
+                showModal(error.message || "Impossibile creare la partita. Controlla che tutti i campi siano corretti.");
             }
         };
 
@@ -961,9 +1070,12 @@
                         globalState.gameData = doc.data();
                         const newStatus = globalState.gameData.status;
 
-                        // Se è appena iniziato uno spareggio, l'host fa lanciare le CPU
                         if (oldStatus !== 'tiebreaker' && newStatus === 'tiebreaker' && globalState.gameData.hostId === globalState.currentUser.uid) {
                             rollCpuDiceInTiebreaker();
+                        }
+                        
+                        if (oldStatus !== 'finale' && newStatus === 'finale' && globalState.gameData.hostId === globalState.currentUser.uid) {
+                            setTimeout(checkFinaleCompletion, 1000);
                         }
 
                         const newScreen = getScreenFromStatus(newStatus);
@@ -997,14 +1109,35 @@
             if (!globalState.gameId || !globalState.currentUser) return;
             
             const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
-            const updatedPlayers = globalState.gameData.players.filter(p => p.uid !== globalState.currentUser.uid);
             
             try {
-                if (updatedPlayers.length > 0) await updateDoc(gameRef, { players: updatedPlayers });
+                const gameDoc = await getDoc(gameRef);
+                if (!gameDoc.exists()) {
+                    leaveGameCleanup();
+                    return;
+                }
+                
+                const gameData = gameDoc.data();
+                const updatedPlayers = gameData.players.filter(p => p.uid !== globalState.currentUser.uid);
+                
+                if (updatedPlayers.length === 0) {
+                    // Se l'ultimo giocatore esce, cancella la partita
+                    await deleteDoc(gameRef);
+                } else {
+                    // Se l'host esce, nomina un nuovo host
+                    if (gameData.hostId === globalState.currentUser.uid) {
+                        const newHost = updatedPlayers.find(p => !p.isCpu) || updatedPlayers[0];
+                        if (newHost) {
+                            await updateDoc(gameRef, { players: updatedPlayers, hostId: newHost.uid });
+                        }
+                    } else {
+                         await updateDoc(gameRef, { players: updatedPlayers });
+                    }
+                }
             } catch (error) {
                  console.error("Errore nell'uscire dalla partita:", error);
             } finally {
-                leaveGameCleanup();
+                 leaveGameCleanup();
             }
         };
 
@@ -1024,7 +1157,7 @@
             switch(status){
                 case 'waiting': return 'lobby';
                 case 'character-selection': return 'characterSelection';
-                case 'challenge': case 'challenge_result': case 'elimination': case 'reveal': case 'reveal_in_progress': case 'revealed': case 'tiebreaker': case 'finale': return 'game';
+                case 'challenge': case 'challenge_result': case 'elimination': case 'reveal': case 'reveal_in_progress': case 'revealed': case 'tiebreaker': case 'finale': case 'game_over': return 'game';
                 default: return 'mainMenu';
             }
         };
@@ -1077,17 +1210,36 @@
             
             const { players, settings } = globalState.gameData;
             
-            // Prendi i primi due giocatori (host e un altro, o due CPU)
-            const finalists = players.slice(0, 2);
+            // Aggiungi CPU se non ci sono abbastanza giocatori
+            const playersNeeded = settings.playerCount - players.length;
+            const allPlayers = [...players];
+             for(let i=0; i < playersNeeded; i++){
+                allPlayers.push({
+                    uid: `CPU-${generateId(8)}`,
+                    name: `CPU ${i+1}`,
+                    isCpu: true,
+                    characterIndex: null,
+                });
+            }
+
+            // Assegna personaggi a tutti
+            let availableIndexes = settings.characters.map((_, i) => i);
+            allPlayers.forEach(p => {
+                if (p.characterIndex === null) {
+                    const randomIndex = Math.floor(Math.random() * availableIndexes.length);
+                    p.characterIndex = availableIndexes.splice(randomIndex, 1)[0];
+                }
+            });
+            
+            const finalists = allPlayers.slice(0, 2);
             if (finalists.length < 2) {
                 showModal("Servono almeno 2 giocatori per testare la finale.");
                 return;
             }
 
-            // Imposta tutti gli altri come eliminati per pulizia
-            const updatedPlayers = players.map(p => {
+            const updatedPlayers = allPlayers.map(p => {
                 if (finalists.some(f => f.uid === p.uid)) {
-                    return { ...p, status: 'active', characterIndex: p.characterIndex !== null ? p.characterIndex : 0 }; // Assegna un personaggio di default se non scelto
+                    return { ...p, status: 'active' };
                 }
                 return { ...p, status: 'eliminated' };
             });
@@ -1097,9 +1249,8 @@
                 players: updatedPlayers,
                 isMerged: true, // La finale è sempre post-merge
                 finale: {
-                    players: finalists.map(p => ({ uid: p.uid, score: 0, choice: null })),
-                    round: 1,
-                    lastResult: null
+                    players: finalists.map(p => ({ uid: p.uid, score: 0 })),
+                    rounds: [{ roll1: null, roll2: null, winner: null }]
                 }
             });
         };
@@ -1158,7 +1309,6 @@
                 teamSlots.push(teams[i % teamCount].id);
             }
             
-            // Mescola gli slot dei team per un'assegnazione casuale
             for (let i = teamSlots.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
                 [teamSlots[i], teamSlots[j]] = [teamSlots[j], teamSlots[i]];
@@ -1213,7 +1363,6 @@
 
             await updateDoc(gameRef, { status: 'elimination', votes: {} });
 
-            // SUBITO DOPO, controlla se il team perdente è solo di CPU
             const updatedGameDoc = await getDoc(gameRef);
             const updatedGameData = updatedGameDoc.data();
             const updatedAtRisk = updatedGameData.players.filter(p => 
@@ -1224,7 +1373,6 @@
             const hasHumanVoters = updatedAtRisk.some(p => !p.isCpu);
 
             if (!hasHumanVoters && updatedAtRisk.length > 0) {
-                // Se non ci sono giocatori umani, simula il voto delle CPU immediatamente
                 const newVotes = {};
                 updatedAtRisk.forEach(voter => {
                     const potentialTargets = updatedAtRisk.filter(p => p.uid !== voter.uid);
@@ -1234,7 +1382,6 @@
                     }
                 });
                 
-                // Aggiorna i voti e passa subito alla fase di rivelazione
                 await updateDoc(gameRef, { votes: newVotes, status: 'reveal' });
             }
         };
@@ -1248,13 +1395,10 @@
                 return;
             }
             
-            // --- BUG FIX ---
-            // Controlla se il giocatore è autorizzato a votare
             if (!isMerged && myPlayer.teamId !== challengeResult.losingTeamId) {
                 showModal("Non puoi votare, il tuo team è salvo!");
                 return;
             }
-            // --- FINE BUG FIX ---
 
             const myUid = globalState.currentUser.uid;
             const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
@@ -1330,12 +1474,10 @@
                 }
             }
             
-            // Controlla se c'è un pareggio per l'eliminazione
             const maxVotes = Math.max(...Object.values(voteCounts));
             const tiedPlayersUids = Object.keys(voteCounts).filter(uid => voteCounts[uid] === maxVotes);
 
-            if (tiedPlayersUids.length > 1) {
-                // C'è un pareggio, avvia lo spareggio
+            if (tiedPlayersUids.length > 1 && maxVotes > 0) {
                 const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
                 await updateDoc(gameRef, {
                     status: 'tiebreaker',
@@ -1368,7 +1510,6 @@
             const safePlayers = elimination.safePlayers;
 
             if (atRiskUids.length - safePlayers.length <= 1) {
-                // Rimane solo l'eliminato
                 const eliminatedUid = atRiskUids.find(uid => !safePlayers.includes(uid));
                 const updatedPlayers = players.map(p => p.uid === eliminatedUid ? { ...p, status: 'eliminated' } : p);
                 const eliminationOrder = [...(globalState.gameData.eliminationOrder || []), eliminatedUid];
@@ -1381,7 +1522,6 @@
                     eliminationOrder: eliminationOrder
                 });
             } else {
-                // Rivela il prossimo giocatore salvo
                 const nextSafeUid = atRiskUids[safePlayers.length];
                 const updatedSafePlayers = [...safePlayers, nextSafeUid];
                 
@@ -1397,7 +1537,7 @@
             const myUid = globalState.currentUser.uid;
             
             const myTieInfo = tiebreaker.players.find(p => p.uid === myUid);
-            if (!myTieInfo || myTieInfo.roll !== null) return; // Già tirato o non in spareggio
+            if (!myTieInfo || myTieInfo.roll !== null) return;
 
             const newRoll = Math.floor(Math.random() * 6) + 1;
             const updatedTiePlayers = tiebreaker.players.map(p => p.uid === myUid ? { ...p, roll: newRoll } : p);
@@ -1439,7 +1579,6 @@
             const { players, tiebreaker } = gameDoc.data();
 
             if (tiebreaker.players.every(p => p.roll !== null)) {
-                // Tutti hanno tirato, determina il risultato
                 const minRoll = Math.min(...tiebreaker.players.map(p => p.roll));
                 const losers = tiebreaker.players.filter(p => p.roll === minRoll);
 
@@ -1461,7 +1600,7 @@
                         'tiebreaker.lastResult': 'tie'
                     });
                      if (globalState.gameData.hostId === globalState.currentUser.uid) {
-                        setTimeout(rollCpuDiceInTiebreaker, 1000);
+                         setTimeout(rollCpuDiceInTiebreaker, 1000);
                     }
                 }
             }
@@ -1488,8 +1627,19 @@
             const { settings, episode, players, eliminationOrder } = globalState.gameData;
             const newEpisodeNumber = episode + 1;
             const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            const activePlayers = players.filter(p => p.status === 'active');
 
-            // 1. Controlla se è un episodio di RITORNO
+            if (activePlayers.length <= 2) {
+                await updateDoc(gameRef, {
+                    status: 'finale',
+                    finale: {
+                        players: activePlayers.map(p => ({ uid: p.uid, score: 0 })),
+                        rounds: [{ roll1: null, roll2: null, winner: null }]
+                    }
+                });
+                return;
+            }
+
             if (settings.returnEpisodes && settings.returnEpisodes.includes(newEpisodeNumber)) {
                 const eliminatedPlayers = players.filter(p => p.status === 'eliminated');
                 if (eliminatedPlayers.length > 0) {
@@ -1498,47 +1648,32 @@
                     const updatedEliminationOrder = eliminationOrder.filter(uid => uid !== returningPlayer.uid);
 
                     await updateDoc(gameRef, {
-                        status: 'return_result', // Stato temporaneo per mostrare chi è tornato
+                        status: 'return_result',
                         players: updatedPlayers,
                         eliminationOrder: updatedEliminationOrder,
                         returningPlayerUid: returningPlayer.uid
                     });
-                    // Dopo un po', si procede
-                    setTimeout(() => nextEpisode(), 5000); // Mostra il risultato per 5 secondi
+                    setTimeout(() => nextEpisode(), 5000);
                     return;
                 }
             }
             
-            // 2. Controlla se è l'episodio del MERGE
             if (newEpisodeNumber === settings.mergeEpisode) {
-                 const activePlayers = players.filter(p => p.status === 'active');
-                 const immunePlayer = activePlayers[Math.floor(Math.random() * activePlayers.length)];
-                 await updateDoc(gameRef, {
-                    status: 'challenge',
-                    episode: newEpisodeNumber,
-                    isMerged: true,
-                    immunePlayerUid: immunePlayer.uid,
-                    challengeResult: null, 
-                    elimination: null, 
-                    tiebreaker: null,
-                    votes: {} 
-                 });
-                 return;
+                    const immunePlayer = activePlayers[Math.floor(Math.random() * activePlayers.length)];
+                    await updateDoc(gameRef, {
+                        status: 'challenge',
+                        episode: newEpisodeNumber,
+                        isMerged: true,
+                        immunePlayerUid: immunePlayer.uid,
+                        challengeResult: null, 
+                        elimination: null, 
+                        tiebreaker: null,
+                        votes: {} 
+                    });
+                    return;
             }
 
-            // 3. Logica per episodi POST-MERGE
             if (globalState.gameData.isMerged) {
-                const activePlayers = players.filter(p => p.status === 'active');
-                if (activePlayers.length <= 2) {
-                    await updateDoc(gameRef, { status: 'finale',
-                        finale: {
-                            players: activePlayers.map(p => ({ uid: p.uid, score: 0, choice: null })),
-                            round: 1,
-                            lastResult: null
-                        }
-                    }); 
-                    return;
-                }
                 const immunePlayer = activePlayers[Math.floor(Math.random() * activePlayers.length)];
                 await updateDoc(gameRef, {
                     status: 'challenge',
@@ -1552,7 +1687,6 @@
                 return;
             }
 
-            // 4. Episodio normale pre-merge
             await updateDoc(gameRef, { 
                 status: 'challenge', 
                 episode: newEpisodeNumber, 
@@ -1562,23 +1696,132 @@
                 votes: {} 
             });
         };
+        
+        const playerRollsDiceFinale = async () => {
+            const { finale } = globalState.gameData;
+            const myUid = globalState.currentUser.uid;
+            const currentRound = finale.rounds[finale.rounds.length - 1];
+
+            const myFinalistInfo = finale.players.find(p => p.uid === myUid);
+            if (!myFinalistInfo) return;
+
+            const isPlayer1 = finale.players[0].uid === myUid;
+            if ((isPlayer1 && currentRound.roll1 !== null) || (!isPlayer1 && currentRound.roll2 !== null)) {
+                return;
+            }
+            
+            const newRoll = Math.floor(Math.random() * 6) + 1;
+            const updatedRounds = [...finale.rounds];
+            const newCurrentRound = updatedRounds[updatedRounds.length - 1];
+
+            if (isPlayer1) {
+                newCurrentRound.roll1 = newRoll;
+            } else {
+                newCurrentRound.roll2 = newRoll;
+            }
+
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            await updateDoc(gameRef, { 'finale.rounds': updatedRounds });
+
+            checkFinaleCompletion();
+        };
+
+        const checkFinaleCompletion = async () => {
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            const gameDoc = await getDoc(gameRef);
+            if (!gameDoc.exists()) return;
+            const gameData = gameDoc.data();
+            if (!gameData.finale) return;
+            const { players, finale } = gameData;
+
+            const currentRound = finale.rounds[finale.rounds.length - 1];
+            
+            const finalist1 = players.find(p => p.uid === finale.players[0].uid);
+            const finalist2 = players.find(p => p.uid === finale.players[1].uid);
+
+            let cpuRolled = false;
+            const updatedRounds = [...finale.rounds];
+            const newCurrentRound = updatedRounds[updatedRounds.length - 1];
+
+            if (finalist1.isCpu && newCurrentRound.roll1 === null) {
+                newCurrentRound.roll1 = Math.floor(Math.random() * 6) + 1;
+                cpuRolled = true;
+            }
+            if (finalist2.isCpu && newCurrentRound.roll2 === null) {
+                newCurrentRound.roll2 = Math.floor(Math.random() * 6) + 1;
+                cpuRolled = true;
+            }
+            
+            if (cpuRolled) {
+                await updateDoc(gameRef, { 'finale.rounds': updatedRounds });
+                setTimeout(checkFinaleCompletion, 500); 
+                return;
+            }
+
+            if (newCurrentRound.roll1 !== null && newCurrentRound.roll2 !== null) {
+                let updatedFinale = { ...finale };
+                
+                if (newCurrentRound.roll1 > newCurrentRound.roll2) {
+                    newCurrentRound.winner = finale.players[0].uid;
+                    updatedFinale.players[0].score++;
+                } else if (newCurrentRound.roll2 > newCurrentRound.roll1) {
+                    newCurrentRound.winner = finale.players[1].uid;
+                    updatedFinale.players[1].score++;
+                } else {
+                    newCurrentRound.winner = 'tie';
+                }
+                
+                updatedFinale.rounds[updatedFinale.rounds.length - 1] = newCurrentRound;
+
+                const winner = updatedFinale.players.find(p => p.score >= 3);
+                if (winner) {
+                    await updateDoc(gameRef, {
+                        status: 'game_over',
+                        winnerUid: winner.uid,
+                        finale: updatedFinale
+                    });
+                } else {
+                    updatedFinale.rounds.push({ roll1: null, roll2: null, winner: null });
+                    await updateDoc(gameRef, { finale: updatedFinale });
+                    setTimeout(checkFinaleCompletion, 1000);
+                }
+            }
+        };
+
+        const hostForcesFinaleRoll = async () => {
+            const { finale } = globalState.gameData;
+            const updatedRounds = [...finale.rounds];
+            const currentRound = updatedRounds[updatedRounds.length - 1];
+
+            if (currentRound.roll1 === null) {
+                currentRound.roll1 = Math.floor(Math.random() * 6) + 1;
+            }
+            if (currentRound.roll2 === null) {
+                currentRound.roll2 = Math.floor(Math.random() * 6) + 1;
+            }
+
+            const gameRef = doc(db, `artifacts/${appId}/public/data/games`, globalState.gameId);
+            await updateDoc(gameRef, { 'finale.rounds': updatedRounds });
+            checkFinaleCompletion();
+        };
 
         // --- INIZIALIZZAZIONE ---
         const init = async () => {
+            if (!app) {
+                renderLoading();
+                appContainer.innerHTML = `<div class="panel text-center"><h2 class="font-bangers text-4xl text-red-600">Errore di Configurazione</h2><p class="mt-4">Impossibile inizializzare Firebase. Assicurati di aver inserito le tue credenziali nel campo <strong>firebaseConfig</strong> all'interno del codice HTML.</p></div>`;
+                return;
+            }
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
                     globalState.currentUser = user;
                 } else {
                     try {
-                        // L'autenticazione anonima è gestita direttamente da Firebase
                         await signInAnonymously(auth);
                     } catch (error) {
                         console.error("Authentication failed:", error);
                         showModal("Autenticazione fallita. L'app potrebbe non funzionare correttamente.");
-                        globalState.currentScreen = 'mainMenu';
-                        render();
                     }
-                    return;
                 }
                 
                 if (globalState.currentScreen === 'loading') {
