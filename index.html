@@ -470,15 +470,30 @@
         
         const renderGame = () => {
             const myPlayer = globalState.gameData.players.find(p => p.uid === globalState.currentUser.uid);
-            if (myPlayer.status === 'eliminated') {
+            const isEliminated = myPlayer.status === 'eliminated';
+            const { status } = globalState.gameData;
+
+            // Handle final stages first, as spectators should see them too.
+            if (status === 'game_over') {
+                renderGameOver();
+                return;
+            }
+            if (status === 'finale') {
+                renderFinale();
+                return;
+            }
+
+            // If an eliminated player is viewing before the finale, show the spectator view.
+            if (isEliminated) {
                 renderSpectatorView();
                 return;
             }
             
-            const { status } = globalState.gameData;
-            if (status === 'game_over') { renderGameOver(); return; }
-            if (status === 'finale') { renderFinale(); return; }
-            if (status === 'tiebreaker') { renderTiebreaker(); return; }
+            // From here on, only active players will execute this code.
+            if (status === 'tiebreaker') {
+                renderTiebreaker();
+                return;
+            }
 
             const { settings, players, teams, episode, challengeResult, votes, elimination, isMerged, immunePlayerUid } = globalState.gameData;
             const getCharacter = (player) => settings.characters[player.characterIndex];
@@ -496,7 +511,7 @@
                     <div class="relative flex flex-col items-center text-center ${indicatorClass}" title="${getCharacter(p).name}">
                         <img src="${getCharacter(p).img || 'https://placehold.co/80x80/e2e8f0/333?text=?'}" onerror="this.onerror=null;this.src='https://placehold.co/80x80/e2e8f0/333?text=Error';" class="w-16 h-16 md:w-20 md:h-20 object-cover rounded-full border-4 border-black">
                         <p class="font-bold text-sm mt-1 truncate max-w-[80px]">${getCharacter(p).name}</p>
-                        ${isImmune ? '<p class="absolute -bottom-4 font-bangers text-xl text-purple-600" style="text-shadow: 1px 1px 0 #fff;">IMMUNE</p>' : ''}
+                        ${isImmune ? `<p class="absolute -bottom-4 font-bangers text-xl text-purple-600" style="text-shadow: 1px 1px 0 #fff;">IMMUNE</p>` : ''}
                     </div>
                     `;
                 }).join('');
@@ -521,7 +536,7 @@
                             <div class="relative flex flex-col items-center text-center ${indicatorClass}" title="${getCharacter(p).name}">
                                 <img src="${getCharacter(p).img || 'https://placehold.co/80x80/e2e8f0/333?text=?'}" onerror="this.onerror=null;this.src='https://placehold.co/80x80/e2e8f0/333?text=Error';" class="w-16 h-16 md:w-20 md:h-20 object-cover rounded-full border-4 border-black">
                                 <p class="font-bold text-sm mt-1 truncate max-w-[80px]">${getCharacter(p).name}</p>
-                                ${isSafe ? '<p class="absolute -bottom-4 font-bangers text-xl text-green-600" style="text-shadow: 1px 1px 0 #fff;">SALVO</p>' : ''}
+                                ${isSafe ? `<p class="absolute -bottom-4 font-bangers text-xl text-green-600" style="text-shadow: 1px 1px 0 #fff;">SALVO</p>` : ''}
                             </div>
                         `}).join('');
 
@@ -596,7 +611,7 @@
         };
         
         const renderSpectatorView = () => {
-            const screenHtml = renderGameHtmlForSpectator(); // Funzione helper per non duplicare codice
+            const screenHtml = renderGameHtmlForSpectator();
             appContainer.innerHTML = renderWithSidePanels(screenHtml);
             updateChatView();
         };
